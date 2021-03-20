@@ -1258,17 +1258,17 @@ EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND `c4` = 'a4' GROUP BY `c3`,`
 
 分析：
 
-1、观察，至少跑1天，看看生产的慢SQL情况
-2、开启慢查询日志，设置阈值，比如超过5秒钟的就是慢SQL，并将它抓取出来
-3、EXPLAIN + 慢SQL分析
-4、SHOW PROFILE
+1、观察，至少跑1天，看看生产的慢SQL情况   
+2、开启慢查询日志，设置阈值，比如超过5秒钟的就是慢SQL，并将它抓取出来   
+3、EXPLAIN + 慢SQL分析   
+4、SHOW PROFILE   
 5、运维经理或DBA，进行MySQL数据库服务器的参数调优
 
 总结（大纲）：
 
-1、慢查询的开启并捕获
-2、EXPLAIN + 慢SQL分析
-3、SHOW PROFILE查询SQL在MySQL数据库中的执行细节和生命周期情况
+1、慢查询的开启并捕获   
+2、EXPLAIN + 慢SQL分析   
+3、SHOW PROFILE查询SQL在MySQL数据库中的执行细节和生命周期情况   
 4、MySQL数据库服务器的参数调优
 
 
