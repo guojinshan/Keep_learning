@@ -451,12 +451,25 @@ ALTER TABLE tabName ADD FULLTEXT indexName(column_list);
 
 # 8.性能分析
 
-## 8.1.EXPLAIN简介
+## 8.1.MySQL访问优化器(MySQL Query Optimizer)
 
+MySQL中有专门负责优化SELECT语句的优化器模块，其主要功能是通过计算分析系统中收集到的统计信息，为客户端请求的Query提供他认为最优的执行计划（问题是他认为最优的数据检索方式，不见得是BDA认为的最优的方式，这部分非常耗时）
+
+当客户端向MySQL请求一条Query，命令解析器模块完成请求分类，区别出是SELECT并转发给MySQL访问优化器时，优化器首先会对整条Query进行优化，处理掉一些常量表达式的预算，直接换成常量值。并对Query中的查询条件进行简化和转换，如去掉一些无用或显而易见的条件，结构调整等。然后分析Query中的Hint信息(如果有)，看显示Hint信息是否可以完全确定该Query的执行计划，如果没有Hint或Hint信息还不足以完全确定执行计划，则会读取所有涉及对象的统计信息，根据Query进行写相应的计算分析，然后再得出最后的执行计划。
+
+## 8.2.MySQL常见瓶颈
+
++ CPU饱和：一般会发生数据装入内存或从从磁盘上读取数据的时候
++ 磁盘I/O瓶颈：发生在装入数据远大于内存容量的时候
++ 服务器硬件的性能瓶颈：使用top，free，iostat和vmstat来查看系统的性能状态
+
+## 8.3.EXPLAIN简介
 > EXPLAIN是什么？
+
 EXPLAIN：SQL的执行计划，使用EXPLAIN关键字可以模拟优化器执行SQL查询语句，从而知道MySQL是如何处理SQL语句的。
 
 > EXPLAIN怎么使用？
+
 语法：`explain` + `SQL`。
 
 ```shell
