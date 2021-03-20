@@ -109,7 +109,7 @@ mysql> show variables like '%char%';
 
 
 
-`MySQL5.7`配置文件位置是`/etc/my.cnf`或者`/etc/mysql/my.cnf`，如果字符集不是`utf-8`直接进入配置文件修改即可。
+`MySQL5.7`配置文件位置是`/etc/my.cnf`或者`/etc/mysql/my.cnf`，如果字符集不是`utf-8`直接进入配置文件修改即可
 
 ```shell
 [client]
@@ -136,13 +136,13 @@ skip-character-set-client-handshake
 skip-name-resolve
 ```
 
-**注意：安装`MySQL`完毕之后，第一件事就是修改字符集编码。**
+**注意：安装`MySQL`完毕之后，第一件事就是修改字符集编码**
 
 ## 1.4.配置文件
 
 **`MySQL`配置文件讲解：https://www.cnblogs.com/gaoyuechen/p/10273102.html**
 
-1、二进制日志`log-bin`：主从复制。
+1、二进制日志`log-bin`：主从复制
 
 ```shell
 # my,cnf
@@ -150,7 +150,7 @@ skip-name-resolve
 log-bin=mysql-bin
 ```
 
-2、错误日志`log-error`：默认是关闭的，记录严重的警告和错误信息，每次启动和关闭的详细信息等。
+2、错误日志`log-error`：默认是关闭的，记录严重的警告和错误信息，每次启动和关闭的详细信息等
 
 ```shell
 # my,cnf
@@ -158,7 +158,7 @@ log-bin=mysql-bin
 log-error = error.log
 ```
 
-3、查询日志`log`：默认关闭，记录查询的`sql`语句，如果开启会降低`MySQL`整体的性能，因为记录日志需要消耗系统资源。
+3、查询日志`log`：默认关闭，记录查询的`sql`语句，如果开启会降低`MySQL`整体的性能，因为记录日志需要消耗系统资源
 
 ```shell
 # my,cnf
@@ -167,11 +167,11 @@ slow_query_log = 1
 slow_query_log_file = slow.log
 ```
 
-4、数据文件。
+4、数据文件
 
-- `frm文件`：存放表结构。
-- `myd`文件：存放表数据。
-- `myi`文件：存放表索引。
+- `frm文件`：存放表结构
+- `myd`文件：存放表数据
+- `myi`文件：存放表索引
 
 ```shell
 # mysql5.7 使用.frm文件来存储表结构
@@ -181,23 +181,23 @@ slow_query_log_file = slow.log
 ```
 
 `MySQL5.7`的`Innodb`存储引擎可将所有数据存放于`ibdata*`的共享表空间，也可将每张表存放于独立的`.ibd`文件的独立表空间。
-共享表空间以及独立表空间都是针对数据的存储方式而言的。
+共享表空间以及独立表空间都是针对数据的存储方式而言的
 
-- 共享表空间: 某一个数据库的所有的表数据，索引文件全部放在一个文件中，默认这个共享表空间的文件路径在`data`目录下。 默认的文件名为`:ibdata1` 初始化为`10M`。
-- 独立表空间: 每一个表都将会生成以独立的文件方式来进行存储，每一个表都有一个`.frm`表描述文件，还有一个`.ibd`文件。 其中这个文件包括了单独一个表的数据内容以及索引内容，默认情况下它的存储位置也是在表的位置之中。在配置文件`my.cnf`中设置： `innodb_file_per_table`。
+- 共享表空间: 某一个数据库的所有的表数据，索引文件全部放在一个文件中，默认这个共享表空间的文件路径在`data`目录下。 默认的文件名为`:ibdata1` 初始化为`10M`
+- 独立表空间: 每一个表都将会生成以独立的文件方式来进行存储，每一个表都有一个`.frm`表描述文件，还有一个`.ibd`文件。 其中这个文件包括了单独一个表的数据内容以及索引内容，默认情况下它的存储位置也是在表的位置之中。在配置文件`my.cnf`中设置： `innodb_file_per_table`
 
 # 2.MySQL逻辑架构
 
 ![MySQL逻辑架构](https://img-blog.csdn.net/20180831173911997?watermark/2/text/aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3pfcnlhbg==/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)
 
 - `Connectors`：指的是不同语言中与SQL的交互。
-- `Connection Pool`：管理缓冲用户连接，线程处理等需要缓存的需求。**MySQL数据库的连接层。**
-- ` Management Serveices & Utilities`：系统管理和控制工具。备份、安全、复制、集群等等。。
-- `SQL Interface`：接受用户的SQL命令，并且返回用户需要查询的结果。
-- `Parser`：SQL语句解析器。
-- `Optimizer`：查询优化器，SQL语句在查询之前会使用查询优化器对查询进行优化。**就是优化客户端请求query**，根据客户端请求的 query 语句，和数据库中的一些统计信息，在一系列算法的基础上进行分析，得出一个最优的策略，告诉后面的程序如何取得这个 query 语句的结果。**For Example**： `select uid,name from user where gender = 1;`这个`select `查询先根据`where `语句进行选取，而不是先将表全部查询出来以后再进行`gender`过滤；然后根据`uid`和`name`进行属性投影，而不是将属性全部取出以后再进行过滤。最后将这两个查询条件联接起来生成最终查询结果。
-- `Caches & Buffers`：查询缓存。
-- `Pluggable Storage Engines`：**存储引擎接口。MySQL区别于其他数据库的最重要的特点就是其插件式的表存储引擎(注意：存储引擎是基于表的，而不是数据库)。**
+- `Connection Pool`：管理缓冲用户连接，线程处理等需要缓存的需求。**MySQL数据库的连接层**
+- ` Management Serveices & Utilities`：系统管理和控制工具。备份、安全、复制、集群等等
+- `SQL Interface`：接受用户的SQL命令，并且返回用户需要查询的结果
+- `Parser`：SQL语句解析器
+- `Optimizer`：查询优化器，SQL语句在查询之前会使用查询优化器对查询进行优化。**就是优化客户端请求query**，根据客户端请求的 query 语句，和数据库中的一些统计信息，在一系列算法的基础上进行分析，得出一个最优的策略，告诉后面的程序如何取得这个 query 语句的结果。**For Example**： `select uid,name from user where gender = 1;`这个`select `查询先根据`where `语句进行选取，而不是先将表全部查询出来以后再进行`gender`过滤；然后根据`uid`和`name`进行属性投影，而不是将属性全部取出以后再进行过滤。最后将这两个查询条件联接起来生成最终查询结果
+- `Caches & Buffers`：查询缓存
+- `Pluggable Storage Engines`：**存储引擎接口。MySQL区别于其他数据库的最重要的特点就是其插件式的表存储引擎(注意：存储引擎是基于表的，而不是数据库)**
 
 - `File System`：数据落地到磁盘上，就是文件的存储。
 
@@ -213,15 +213,14 @@ MySQL数据库和其他数据库相比，MySQL有点与众不同，主要体现�
 
 ![MySQL逻辑架构](https://img-blog.csdnimg.cn/20200801165252510.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L1JyaW5nb18=,size_16,color_FFFFFF,t_70)
 
-- 连接层：最上层是一些客户端和连接服务，包含本地sock通信和大多数基于客户端/服务端工具实现的类似于`tcp/ip`的通信。主要完成一些类似于连接处理、授权认证、及相关的安全方案。在该层上引入了线程池的概念，为通过认证安全接入的客户端提供线程。同样在该层上可以实现基于`SSL`的安全链接。服务器也会为安全接入的每个客户端验证它所具有的操作权限。
-
-- 服务层：MySQL的核心服务功能层，该层是MySQL的核心，包括查询缓存，解析器，解析树，预处理器，查询优化器。主要进行查询解析、分析、查询缓存、内置函数、存储过程、触发器、视图等，select操作会先检查是否命中查询缓存，命中则直接返回缓存数据，否则解析查询并创建对应的解析树。
-- 引擎层：存储引擎层，存储引擎真正的负责了MySQL中数据的存储和提取，服务器通过API与存储引擎进行通信。不同的存储引擎具有的功能不同，这样我们可以根据自己的实际需要进行选取。
-- 存储层：数据存储层，主要是将数据存储在运行于裸设备的文件系统之上，并完成与存储引擎的交互。
+- 连接层：最上层是一些客户端和连接服务，包含本地sock通信和大多数基于客户端/服务端工具实现的类似于`tcp/ip`的通信。主要完成一些类似于连接处理、授权认证、及相关的安全方案。在该层上引入了线程池的概念，为通过认证安全接入的客户端提供线程。同样在该层上可以实现基于`SSL`的安全链接。服务器也会为安全接入的每个客户端验证它所具有的操作权限。、
+- 服务层：MySQL的核心服务功能层，该层是MySQL的核心，包括查询缓存，解析器，解析树，预处理器，查询优化器。主要进行查询解析、分析、查询缓存、内置函数、存储过程、触发器、视图等，select操作会先检查是否命中查询缓存，命中则直接返回缓存数据，否则解析查询并创建对应的解析树
+- 引擎层：存储引擎层，存储引擎真正的负责了MySQL中数据的存储和提取，服务器通过API与存储引擎进行通信。不同的存储引擎具有的功能不同，这样我们可以根据自己的实际需要进行选取
+- 存储层：数据存储层，主要是将数据存储在运行于裸设备的文件系统之上，并完成与存储引擎的交互
 
 # 3.存储引擎
 
-`show engines;`命令查看MySQL5.7支持的存储引擎。
+`show engines;`命令查看MySQL5.7支持的存储引擎
 
 ```shell
 mysql> show engines;
@@ -229,7 +228,7 @@ mysql> show engines;
 
 ![存储引擎](https://img-blog.csdnimg.cn/20200801170442428.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L1JyaW5nb18=,size_16,color_FFFFFF,t_70)
 
-`show variables like 'default_storage_engine%';`查看当前数据库正在使用的存储引擎。
+`show variables like 'default_storage_engine%';`查看当前数据库正在使用的存储引擎
 
 ```shell
 mysql> show variables like 'default_storage_engine%';
@@ -298,7 +297,7 @@ LIMIT               			# 9
 
 ![七种JOIN理论](https://img-blog.csdnimg.cn/20200801212011559.jpg?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L1JyaW5nb18=,size_16,color_FFFFFF,t_70)
 
-```sql
+```
 /* 1 */ 【A独有部分 + AB公有部分】
 SELECT <select_list> FROM TableA A LEFT JOIN TableB B ON A.Key = B.Key;
 
@@ -333,21 +332,17 @@ SELECT <select_list> FROM TableA A RIGHT JOIN TableB B ON A.Key = B.Key WHERE A.
 
 ## 7.1.索引简介
 
-> 索引是什么？
+> 索引是什么?
 
-MySQL官方对索引的定义为：**索引（INDEX）是帮助MySQL高效获取数据的数据结果。**
-
-从而可以获得索引的本质：**索引是排好序的快速查找数据结构。**
+索引（INDEX）是帮助MySQL高效获取数据的**排好序**的快速查找**数据结构**
 
 索引的目的在于提高查询效率，可以类比字典的目录。如果要查`mysql`这个这个单词，我们肯定要先定位到`m`字母，然后从上往下找`y`字母，再找剩下的`sql`。如果没有索引，那么可能需要`a---z`，这样全字典扫描，如果我想找`Java`开头的单词呢？如果我想找`Oracle`开头的单词呢？？？
 
 **重点：索引会影响到MySQL查找(WHERE的查询条件)和排序(ORDER BY)两大功能！**
 
-**除了数据本身之外，数据库还维护着一个满足特定查找算法的数据结构，这些数据结构以某种方式指向数据，这样就可以在这些数据结构的基础上实现高级查找算法，这种数据结构就是索引。**
+**除了数据本身之外，数据库还维护着一个满足特定查找算法的数据结构，这些数据结构以某种方式指向数据，这样就可以在这些数据结构的基础上实现高级查找算法，这种数据结构就是索引**
 
-
-
-一般来说，索引本身也很大，不可能全部存储在内存中，因此索引往往以索引文件的形式存储在磁盘上。
+一般来说，索引本身也很大，不可能全部存储在内存中，因此索引往往以索引文件的形式存储在磁盘上
 
 ```shell
 # Linux下查看磁盘空间命令 df -h 
@@ -362,7 +357,6 @@ overlay          40G   16G   23G  41%
 ```
 
 我们平时所说的索引，如果没有特别指明，都是指B树（多路搜索树，并不一定是二叉的）结构组织的索引。其中聚集索引，次要索引，覆盖索引，复合索引，前缀索引，唯一索引默认都是使用B+树索引，统称索引。当然，除了B+树这种数据结构的索引之外，还有哈希索引（Hash Index）等。
-
 
 
 > 索引的优势和劣势
@@ -382,9 +376,9 @@ overlay          40G   16G   23G  41%
 
 索引分类：
 
-- 单值索引：一个索引只包含单个列，一个表可以有多个单列索引。
-- 唯一索引：索引列的值必须唯一，但是允许空值。
-- 复合索引：一个索引包含多个字段。
+- 单值索引：一个索引只包含单个列，一个表可以有多个单列索引
+- 唯一索引：索引列的值必须唯一，但是允许空值
+- 复合索引：一个索引包含多个字段
 
 **建议：一张表建的索引最好不要超过5个！**
 
