@@ -515,13 +515,13 @@ mysql> EXPLAIN SELECT * FROM pms_category \G;
 
 > possible_keys 和 key
 
-`possible_keys`：显示可能应用在这张表中的索引，一个或者多个。查询涉及到的字段上若存在索引，则该索引将被列出，**但实际上不一定被查询使用**
-
+`possible_keys`：显示可能应用在这张表中的索引，一个或者多个。查询涉及到的字段上若存在索引，则该索引将被列出，**但实际上不一定被查询使用**   
 `key`：实际使用的索引，如果为`NULL`，则没有使用索引
-	+ 如果`possible_keys`不为`NULL`，`key`为`NULL`，称为索引失效
-	+ 如果`possible_keys`为`NULL`，`key`不为`NULL`，即该索引仅仅出现在`key`列表中，称为索引覆盖
-	+ 当`SELECT`查询的字段和所键`复合索引`的`个数`和`顺序`刚好吻合时，会出现索引覆盖,此时`type`为`index`
-	+ 当使用`SELECT *`，只要没有建立索引，都是使用全表扫描, `type`为`ALL`
+
++ 如果`possible_keys`不为`NULL`，`key`为`NULL`，称为索引失效
++ 如果`possible_keys`为`NULL`，`key`不为`NULL`，即该索引仅仅出现在`key`列表中，称为索引覆盖
++ 当`SELECT`查询的字段和所键`复合索引`的`个数`和`顺序`刚好吻合时，会出现索引覆盖,此时`type`为`index`
++ 当使用`SELECT *`，只要没有建立索引，都是使用全表扫描, `type`为`ALL`
 	
 > key_len
 
