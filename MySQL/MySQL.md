@@ -1143,11 +1143,15 @@ EXPLAIN SELECT * FROM `staffs` WHERE `name` = 'Ringo' OR name='张三';
 | where a = 3 and b = 5                                   | Y，使用到a，b                               |
 | where a = 3 and b = 5                                   | Y，使用到a，b，c                            |
 | where b = 3 或者 where b = 3 and c = 4 或者 where c = 4  | N，没有用到a字段                            |
-| where a = 3 and c = 5                                   | 使用到a，但是没有用到c，因为b断了             |
-| where a = 3 and b > 4 and c = 5                         | 使用到a，b，但是没有用到c，因为c在范围之后     |
-| where a = 3 and b like 'kk%' and c = 4                  | a, b能用,c不能用			            |
+| where a = 3 and c = 5                                   | Y，使用到a，但是没有用到c，因为b断了          |
+| where a = 3 and b > 4 and c = 5                         | Y， 使用到a，b，但是没有用到c，因为c在范围之后 |
+| where a = 3 and b like 'kk%' and c = 4                  | Y， 使用到a,b,c, 范围查询		         |
+| where a = 3 and b like '%kk' and c = 4                  | Y，只用到a		           	    |
+| where a = 3 and b like '%kk%' and c = 4                 | Y，只用到a		           	    |
+| where a = 3 and b like 'k%kk%' and c = 4                | Y， 使用到a,b,c, 范围查询		         |
 
-## 10.10.面试题分析
+
+## 10.11.面试题分析
 
 > 数据准备
 
@@ -1173,40 +1177,36 @@ INSERT INTO `test03`(`c1`,`c2`,`c3`,`c4`,`c5`) VALUES('e1','e2','e3','e4','e5');
 CREATE INDEX idx_test03_c1234 ON `test03`(`c1`,`c2`,`c3`,`c4`);
 ```
 
-> 题目
+> 题目：创建了复合索引idx_test03_c1234，根据以下SQL分析索引的使用情况：
 
-```sql
-/* 最好索引怎么创建的，就怎么用，按照顺序使用，避免让MySQL再自己去翻译一次 */
+```
+/* 最好索引怎么创建的，就怎么用，按照顺序使用，避免让MySQL自己再去翻译一次 */
 
-/* 1.全值匹配 用到索引c1 c2 c3 c4全字段 */
+/* 1.全值匹配, 用到索引c1 c2 c3 c4全字段 */
 EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND `c2` = 'a2' AND `c3` = 'a3' AND `c4` = 'a4';
 
-/* 2.用到索引c1 c2 c3 c4全字段 MySQL的查询优化器会优化SQL语句的顺序*/
+/* 2.用到索引c1 c2 c3 c4全字段, MySQL的查询优化器会优化SQL语句的顺序*/
 EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND `c2` = 'a2' AND `c4` = 'a4' AND `c3` = 'a3';
 
-/* 3.用到索引c1 c2 c3 c4全字段 MySQL的查询优化器会优化SQL语句的顺序*/
+/* 3.用到索引c1 c2 c3 c4全字段, MySQL的查询优化器会优化SQL语句的顺序*/
 EXPLAIN SELECT * FROM `test03` WHERE `c4` = 'a4' AND `c3` = 'a3' AND `c2` = 'a2' AND `c1` = 'a1';
 
 /* 4.用到索引c1 c2 c3字段，c4字段失效，范围之后全失效 */
 EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND `c2` = 'a2' AND `c3` > 'a3' AND `c4` = 'a4';
 
-/* 5.用到索引c1 c2 c3 c4全字段 MySQL的查询优化器会优化SQL语句的顺序*/
+/* 5.用到索引c1 c2 c3 c4全字段, MySQL的查询优化器会优化SQL语句的顺序*/
 EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND `c2` = 'a2' AND `c4` > 'a4' AND `c3` = 'a3';
 
-/* 
-   6.用到了索引c1 c2 c3三个字段, c1和c2两个字段用于查找,  c3字段用于排序了但是没有统计到key_len中，c4字段失效
-*/
+/* 6.用到了索引c1 c2 c3三个字段, c1和c2两个字段用于查找,  c3字段用于排序了但是没有统计到key_len中，c4字段失效*/
 EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND `c2` = 'a2' AND `c4` = 'a4' ORDER BY `c3`;
 
 /* 7.用到了索引c1 c2 c3三个字段，c1和c2两个字段用于查找, c3字段用于排序了但是没有统计到key_len中*/
 EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND `c2` = 'a2' ORDER BY `c3`;
 
-/* 
-   8.用到了索引c1 c2两个字段，c4失效，c1和c2两个字段用于查找，c4字段排序产生了Using filesort说明排序没有用到c4字段 
-*/
+/* 8.用到了索引c1 c2两个字段，c4失效，c1和c2两个字段用于查找，c4字段排序产生了Using filesort说明排序没有用到c4字段*/
 EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND `c2` = 'a2' ORDER BY `c4`;
 
-/* 9.用到了索引c1 c2 c3三个字段，c1用于查找，c2和c3用于排序 */
+/* 9.用到了索引c1 c2 c3三个字段，c1用于查找，c2和c3用于排序*/
 EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND `c5` = 'a5' ORDER BY `c2`, `c3`;
 
 /* 10.用到了c1一个字段，c1用于查找，c3和c2两个字段索引失效，产生了Using filesort */
@@ -1218,14 +1218,11 @@ EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND  `c2` = 'a2' ORDER BY c2, c
 /* 12.用到了c1 c2 c3三个字段，c1 c2用于查找，c2 c3用于排序 */
 EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND  `c2` = 'a2' AND `c5` = 'a5' ORDER BY c2, c3;
 
-/* 
-   13.用到了c1 c2 c3三个字段，c1 c2用于查找，c2 c3用于排序 没有产生Using filesort 
-      因为之前c2这个字段已经确定了是'a2'了，这是一个常量，再去ORDER BY c3,c2 这时候c2已经不用排序了！
-      所以没有产生Using filesort 和(10)进行对比学习！
+/* 13.用到了c1 c2 c3三个字段，c1 c2用于查找，c2 c3用于排序 没有产生Using filesort, 因为之前c2这个字段已经确定了是'a2'了，这是一个常	量，再去ORDER BY c3,c2 这时候c2已经不用排序了！所以没有产生Using filesort 和(10)进行对比学习！
 */
 EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND `c2` = 'a2' AND `c5` = 'a5' ORDER BY c3, c2;
 
-/* GROUP BY 表面上是叫做分组，但是分组之前必定排序。 */
+/* GROUP BY 表面上是叫做分组，但是分组之前必排序*/
 
 /* 14.用到c1 c2 c3三个字段，c1用于查找，c2 c3用于排序，c4失效 */
 EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND `c4` = 'a4' GROUP BY `c2`,`c3`;
@@ -1234,16 +1231,16 @@ EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND `c4` = 'a4' GROUP BY `c2`,`
 EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND `c4` = 'a4' GROUP BY `c3`,`c2`;
 ```
 
-`GROUP BY`基本上都需要进行排序，索引优化几乎和`ORDER BY`一致，但是`GROUP BY`会有临时表的产生。
+`GROUP BY`基本上都需要进行排序和索引优化几乎和`ORDER BY`一致，但是`GROUP BY`会有临时表的产生
 
-## 10.11.总结
+## 10.12.总结
 
 索引优化的一般性建议：
 
-- 对于单值索引，尽量选择针对当前`query`过滤性更好的索引。
-- 在选择复合索引的时候，当前`query`中过滤性最好的字段在索引字段顺序中，位置越靠前越好。
-- 在选择复合索引的时候，尽量选择可以能够包含当前`query`中的`where`子句中更多字段的索引。
-- 尽可能通过分析统计信息和调整`query`的写法来达到选择合适索引的目的。
+- 对于单值索引，尽量选择针对当前`query`过滤性更好的索引
+- 在选择复合索引的时候，当前`query`中过滤性最好的字段在索引字段顺序中，位置越靠左越好
+- 在选择复合索引的时候，尽量选择可以能够包含当前`query`中的`where`子句中更多字段的索引
+- 尽可能通过分析统计信息和调整`query`的写法来达到选择合适索引的目的
 
 口诀：
 
@@ -1261,42 +1258,32 @@ EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND `c4` = 'a4' GROUP BY `c3`,`
 
 分析：
 
-1、观察，至少跑1天，看看生产的慢SQL情况。
-
-2、开启慢查询日志，设置阈值，比如超过5秒钟的就是慢SQL，并将它抓取出来。
-
-3、explain + 慢SQL分析。
-
-4、show Profile。
-
-5、运维经理 OR DBA，进行MySQL数据库服务器的参数调优。
-
-
+1、观察，至少跑1天，看看生产的慢SQL情况
+2、开启慢查询日志，设置阈值，比如超过5秒钟的就是慢SQL，并将它抓取出来
+3、EXPLAIN + 慢SQL分析
+4、SHOW PROFILE
+5、运维经理或DBA，进行MySQL数据库服务器的参数调优
 
 总结（大纲）：
 
-1、慢查询的开启并捕获。
-
-2、explain + 慢SQL分析。
-
-3、show Profile查询SQL在MySQL数据库中的执行细节和生命周期情况。
-
-4、MySQL数据库服务器的参数调优。
-
+1、慢查询的开启并捕获
+2、EXPLAIN + 慢SQL分析
+3、SHOW PROFILE查询SQL在MySQL数据库中的执行细节和生命周期情况
+4、MySQL数据库服务器的参数调优
 
 
 # 12.查询优化
 
 ## 12.1.小表驱动大表
 
-> 优化原则：对于MySQL数据库而言，永远都是小表驱动大表。
+> 优化原则：对于MySQL数据库而言，永远都是小表驱动大表
 
 ```java
 /**
-* 举个例子：可以使用嵌套的for循环来理解小表驱动大表。
-* 以下两个循环结果都是一样的，但是对于MySQL来说不一样，
-* 第一种可以理解为，和MySQL建立5次连接每次查询1000次。
-* 第一种可以理解为，和MySQL建立1000次连接每次查询5次。
+* 举个例子：可以使用嵌套的for循环来理解小表驱动大表
+* 以下两个循环结果都是一样的，但是对于MySQL来说不一样
+* 第一种可以理解为，和MySQL建立5次连接每次查询1000次
+* 第一种可以理解为，和MySQL建立1000次连接每次查询5次
 */
 for(int i = 1; i <= 5; i ++){
     for(int j = 1; j <= 1000; j++){
@@ -1326,13 +1313,13 @@ SELECT * FROM `A` WHERE EXISTS (SELECT 1 FROM `B` WHERE `B`.id = `A`.id);
 **EXISTS：**
 
 - 语法：`SELECT....FROM tab WHERE EXISTS(subquery);`该语法可以理解为：
-- 该语法可以理解为：将主查询的数据，放到子查询中做条件验证，根据验证结果（`true`或是`false`）来决定主查询的数据结果是否得以保留。
+- 该语法可以理解为：将主查询的数据，放到子查询中做条件验证，根据验证结果（`true`或是`false`）来决定主查询的数据结果是否得以保留
 
 **提示：**
 
-- `EXISTS(subquery)`子查询只返回`true`或者`false`，因此子查询中的`SELECT *`可以是`SELECT 1 OR SELECT X`，它们并没有区别。
-- `EXISTS(subquery)`子查询的实际执行过程可能经过了优化而不是我们理解上的逐条对比，如果担心效率问题，可进行实际检验以确定是否有效率问题。
-- `EXISTS(subquery)`子查询往往也可以用条件表达式，其他子查询或者`JOIN`替代，何种最优需要具体问题具体分析。
+- `EXISTS(subquery)`子查询只返回`true`或者`false`，因此子查询中的`SELECT *`可以是`SELECT 1 OR SELECT X`，它们并没有区别
+- `EXISTS(subquery)`子查询的实际执行过程可能经过了优化而不是我们理解上的逐条对比，如果担心效率问题，可进行实际检验以确定是否有效率问题
+- `EXISTS(subquery)`子查询往往也可以用条件表达式，其他子查询或者`JOIN`替代，何种最优需要具体问题具体分析
 
 
 
