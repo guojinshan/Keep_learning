@@ -874,7 +874,6 @@ CREATE TABLE IF NOT EXISTS `phone`(
 ) COMMENT '手机';
 
 INSERT INTO phone(card) VALUES(FLOOR(1 + (RAND() * 20)));  
-
 ```
 
 > 三表连接查询SQL优化
@@ -883,9 +882,9 @@ INSERT INTO phone(card) VALUES(FLOOR(1 + (RAND() * 20)));
 
 ![explain](https://img-blog.csdnimg.cn/20200803160631786.png)
 
-2、根据两表查询优化的经验，左连接需要在右表上添加索引，所以尝试在`book`表和`phone`表上添加索引。
+2、根据两表查询优化的经验，左连接需要在右表上添加索引，所以分别尝试在`book`表和`phone`表上添加索引
 
-```sql
+```
 /* 在book表创建索引 */
 CREATE INDEX idx_book_card ON book(card);
 
@@ -893,18 +892,20 @@ CREATE INDEX idx_book_card ON book(card);
 CREATE INDEX idx_phone_card ON phone(card);
 ```
 
-3、再次执行SQL的执行计划
+3、再次查看SQL的执行计划
 
 ![explain](https://img-blog.csdnimg.cn/20200803161013880.png)
+
+总结：Type都是ref且总rows优化很好，效果不错，因此索引最好建在经常需要查询的字段中
 
 ## 9.4.结论
 
 `JOIN`语句的优化：
 
-- 尽可能减少`JOIN`语句中的`NestedLoop`（嵌套循环）的总次数：**永远都是小的结果集驱动大的结果集**。
-- 优先优化`NestedLoop`的内层循环。
-- 保证`JOIN`语句中被驱动表上`JOIN`条件字段已经被索引。
-- 当无法保证被驱动表的`JOIN`条件字段被索引且内存资源充足的前提下，不要太吝惜`Join Buffer` 的设置。
+- 尽可能减少`JOIN`语句中的`NestedLoop`（嵌套循环）的总次数：**永远都是小的结果集驱动大的结果集**
+- 优先优化`NestedLoop`的内层循环
+- 保证`JOIN`语句中被驱动表上`JOIN`条件字段已经被索引
+- 当无法保证被驱动表的`JOIN`条件字段被索引且内存资源充足的前提下，不要太吝惜`Join Buffer` 的设置
 
 # 10.索引失效
 
@@ -968,11 +969,7 @@ EXPLAIN SELECT * FROM `staffs` WHERE `name` = 'Ringo' AND `pos` = 'manager';
 
 **最佳左前缀法则：如果索引是多字段的复合索引，要遵守最佳左前缀法则。指的是查询从索引的最左前列开始并且不跳过索引中的字段。**
 
-
-
 **口诀：带头大哥不能死，中间兄弟不能断。**
-
-
 
 ## 10.3.索引列上不计算
 
@@ -1008,11 +1005,7 @@ mysql> SELECT * FROM `staffs` WHERE LEFT(`name`, 5) = 'Ringo';
 
 **由此可见，在索引列上进行计算，会使索引失效。**
 
-
-
 **口诀：索引列上不计算。**
-
-
 
 ## 10.4.范围之后全失效
 
@@ -1033,11 +1026,7 @@ EXPLAIN SELECT * FROM `staffs` WHERE `name` = '张三' AND `age` > 18 AND `pos` 
 
 **由此可知，查询范围的字段使用到了索引，但是范围之后的索引字段会失效。**
 
-
-
 **口诀：范围之后全失效。**
-
-
 
 ## 10.5.覆盖索引尽量用
 
