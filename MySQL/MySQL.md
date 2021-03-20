@@ -769,15 +769,15 @@ CREATE INDEX idx_article_ccv ON article(category_id,comments,views);
 
 ![explain](https://img-blog.csdnimg.cn/20200803134549914.png)
 
-我们发现，创建符合索引`idx_article_ccv`之后，虽然解决了全表扫描的问题，但是在`ORDER BY`排序的时候没有用到索引，MySQL居然还是用的`Using filesort`
+我们发现，创建符合索引`idx_article_ccv`之后，虽然解决了全表扫描的问题，但是在`ORDER BY`排序的时候没有用到索引，并且依然出现`Using filesort`
 
 5、我们试试把SQL修改为`SELECT id,author_id FROM article WHERE category_id = 1 AND comments = 1 ORDER BY views DESC LIMIT 1;`看看SQL的执行计划
 
 ![explain](https://img-blog.csdnimg.cn/20200803135228945.png)
 
-推论：当`comments > 1`的时候`ORDER BY`排序`views`字段索引就用不上，但是当`comments = 1`的时候`ORDER BY`排序`views`字段索引就可以用上！！！**所以，范围之后的索引会失效。**
+结论：当`comments > 1`的时候`ORDER BY`排序`views`字段索引就用不上，但是当`comments = 1`的时候`ORDER BY`排序`views`字段索引就可以用上！！！这是因为按照Btree索引的工作原理，先排序`category_id`，如果遇到相同的`category_id`则再排序`comments`，如果遇到相同的`comments`,则再排序`views`。当`comments`字段在联合索引里处于中间位置时，因为`comments>1`条件是一个范围值，使得MySQL无法利用索引再对后面的`views`进行检索，即range类型查询字段后的索引失效。
 
-6、我们现在知道**范围之后的索引会失效**，原来的索引`idx_article_ccv`最后一个字段`views`会失效，那么我们如果删除`comments`这个索引，创建`idx_article_cv`索引呢？ (大胆假设，小心求证)
+6、我们现在知道**范围之后的索引会失效**，那么我们如果删除`comments`这个索引，创建`idx_article_cv`索引呢？ (大胆假设，小心求证)
 
 ```
 /* 删除索引 idx_article_cv */
@@ -793,6 +793,13 @@ CREATE INDEX idx_article_cv ON article(category_id,views);
 8、当前索引是`idx_article_cv`，来看一下SQL执行计划
 
 ![explain](https://img-blog.csdnimg.cn/20200803140951803.png)
+
+结论：可以看到type为ref，Extra中的Using filesort也消失了，结果非常理想
+
+9、同样，如果调整检索时`comments`和·views·的顺序，上述问题也能够迎刃而解，因此索引需要在不断的验证，尝试
+```
+CREATE INDEX idx_article_ccv ON article(category_id,views,comments);
+```
 
 ## 9.2.两表索引分析
 
