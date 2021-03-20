@@ -289,6 +289,9 @@ LIMIT               			# 9
 	<limit_number>
 ```
 
+![MySQL解析过程](https://github.com/guojinshan/Keep_learning/blob/main/MySQL/Picture/Resolve.jpg)
+
+
 # 6.七种JOIN理论
 
 ![七种JOIN理论](https://img-blog.csdnimg.cn/20200801212011559.jpg?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L1JyaW5nb18=,size_16,color_FFFFFF,t_70)
