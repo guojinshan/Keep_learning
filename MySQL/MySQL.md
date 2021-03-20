@@ -291,7 +291,7 @@ LIMIT               			# 9
 
 [MySQL解析SQL语句过程
 
-![MySQL解析过程](https://github.com/guojinshan/Keep_learning/blob/main/MySQL/Picture/Resolve.jpg=400x300)
+![MySQL解析过程](https://github.com/guojinshan/Keep_learning/blob/main/MySQL/Picture/Resolve.jpg =100x200)
 
 
 # 6.七种JOIN理论
