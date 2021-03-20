@@ -1145,7 +1145,7 @@ EXPLAIN SELECT * FROM `staffs` WHERE `name` = 'Ringo' OR name='张三';
 | where b = 3 或者 where b = 3 and c = 4 或者 where c = 4  | N，没有用到a字段                            |
 | where a = 3 and c = 5                                   | 使用到a，但是没有用到c，因为b断了             |
 | where a = 3 and b > 4 and c = 5                         | 使用到a，b，但是没有用到c，因为c在范围之后     |
-| where a = 3 and b like 'kk%' and c = 4                  | a, b能用,c不用用			            |
+| where a = 3 and b like 'kk%' and c = 4                  | a, b能用,c不能用			            |
 
 ## 10.10.面试题分析
 
