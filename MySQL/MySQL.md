@@ -201,15 +201,9 @@ slow_query_log_file = slow.log
 
 - `File System`：数据落地到磁盘上，就是文件的存储。
 
-
-
 MySQL数据库和其他数据库相比，MySQL有点与众不同，主要体现在存储引擎的架构上，**插件式的存储引擎架构将查询处理和其他的系统任务以及数据的存储提取相分离**。这种架构可以根据业务的需求和实际需求选择合适的存储引擎。
 
-
-
 > 逻辑架构分层
-
-
 
 ![MySQL逻辑架构](https://img-blog.csdnimg.cn/20200801165252510.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L1JyaW5nb18=,size_16,color_FFFFFF,t_70)
 
@@ -315,14 +309,16 @@ SELECT <select_list> FROM TableA A RIGHT JOIN TableB B ON A.Key = B.Key WHERE A.
 
 /* 6 */ 【A独有部分 + AB公有部分 + B独有部分】
 SELECT <select_list> FROM TableA A FULL OUTER JOIN TableB B ON A.Key = B.Key;
-/* MySQL不支持FULL OUTER JOIN这种语法 可以改成 1+2 */
+
+/* MySQL不支持FULL OUTER JOIN这种语法, ORACAL支持，可以改成 1+2 */
 SELECT <select_list> FROM TableA A LEFT JOIN TableB B ON A.Key = B.Key
 UNION
 SELECT <select_list> FROM TableA A RIGHT JOIN TableB B ON A.Key = B.Key;
 
 /* 7 */ 【A独有部分 + B独有部分】
 SELECT <select_list> FROM TableA A FULL OUTER JOIN TableB B ON A.Key = B.Key WHERE A.Key IS NULL OR B.Key IS NULL;
-/* MySQL不支持FULL OUTER JOIN这种语法 可以改成 4+5 */
+
+/* MySQL不支持FULL OUTER JOIN这种语法，ORACAL支持，可以改成 4+5 */
 SELECT <select_list> FROM TableA A LEFT JOIN TableB B ON A.Key = B.Key WHERE B.Key IS NULL;
 UNION
 SELECT <select_list> FROM TableA A RIGHT JOIN TableB B ON A.Key = B.Key WHERE A.Key IS NULL;
@@ -334,17 +330,19 @@ SELECT <select_list> FROM TableA A RIGHT JOIN TableB B ON A.Key = B.Key WHERE A.
 
 > 索引是什么?
 
-索引（INDEX）是帮助MySQL高效获取数据的**排好序**的快速查找**数据结构**
-
-索引的目的在于提高查询效率，可以类比字典的目录。如果要查`mysql`这个这个单词，我们肯定要先定位到`m`字母，然后从上往下找`y`字母，再找剩下的`sql`。如果没有索引，那么可能需要`a---z`，这样全字典扫描，如果我想找`Java`开头的单词呢？如果我想找`Oracle`开头的单词呢？？？
+索引（INDEX）是帮助MySQL高效获取数据的**排好序的快速查找数据结构(本质)**, 可以类比字典的目录, 提高查找效率
 
 **重点：索引会影响到MySQL查找(WHERE的查询条件)和排序(ORDER BY)两大功能！**
 
-**除了数据本身之外，数据库还维护着一个满足特定查找算法的数据结构，这些数据结构以某种方式指向数据，这样就可以在这些数据结构的基础上实现高级查找算法，这种数据结构就是索引**
+除了数据本身之外，**数据库系统还维护着一个满足特定查找算法的数据结构**，这些数据结构以某种方式引用(指向)数据，这样就可以在这些数据结构的基础上实现高级查找算法，这种数据结构就是索引
 
-一般来说，索引本身也很大，不可能全部存储在内存中，因此索引往往以索引文件的形式存储在磁盘上
+【以二叉搜索树为例】
 
-```shell
+
+
+
+一般来说，索引本身也很大，不可能全部存储在内存中，因此索引往往以索引文件的形式存储在磁盘上(多次查询需要多次IO访问)
+```
 # Linux下查看磁盘空间命令 df -h 
 [root@Ringo ~]# df -h
 Filesystem      Size  Used Avail Use% Mounted on
@@ -356,8 +354,7 @@ tmpfs           920M     0  920M   0% /sys/fs/cgroup
 overlay          40G   16G   23G  41% 
 ```
 
-我们平时所说的索引，如果没有特别指明，都是指B树（多路搜索树，并不一定是二叉的）结构组织的索引。其中聚集索引，次要索引，覆盖索引，复合索引，前缀索引，唯一索引默认都是使用B+树索引，统称索引。当然，除了B+树这种数据结构的索引之外，还有哈希索引（Hash Index）等。
-
+我们平时所说的索引，如果没有特别指明，都是指B树（多路搜索树，并不一定是二叉的）结构组织的索引。其中聚簇索引，次要索引，覆盖索引，复合索引，前缀索引，唯一索引默认都是使用B+树实现，统称索引。当然，除了B+树这种数据结构的索引之外，还有哈希索引（Hash Index）等。
 
 > 索引的优势和劣势
 
@@ -396,8 +393,6 @@ DROP INDEX [indexName] ON tabName;
 /* 加上\G就可以以列的形式查看了 不加\G就是以表的形式查看 */
 SHOW INDEX FROM tabName \G;
 ```
-
-
 
 使用`ALTER`命令来为数据表添加索引
 
