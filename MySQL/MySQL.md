@@ -1300,7 +1300,7 @@ for(int i = 1; i <= 1000; i ++){
 
 > IN和EXISTS
 
-```sql
+```
 /* 优化原则：小表驱动大表，即小的数据集驱动大的数据集 */
 
 /* IN适合B表比A表数据小的情况*/
@@ -1312,16 +1312,14 @@ SELECT * FROM `A` WHERE EXISTS (SELECT 1 FROM `B` WHERE `B`.id = `A`.id);
 
 **EXISTS：**
 
-- 语法：`SELECT....FROM tab WHERE EXISTS(subquery);`该语法可以理解为：
-- 该语法可以理解为：将主查询的数据，放到子查询中做条件验证，根据验证结果（`true`或是`false`）来决定主查询的数据结果是否得以保留
+- 语法：`SELECT....FROM tab WHERE EXISTS(subquery);`
+- 该语法可以理解为：将主查询的数据，放到子查询中做条件验证，根据验证结果（`True`或是`False`）来决定主查询的数据结果是否得以保留
 
 **提示：**
 
-- `EXISTS(subquery)`子查询只返回`true`或者`false`，因此子查询中的`SELECT *`可以是`SELECT 1 OR SELECT X`，它们并没有区别
+- `EXISTS(subquery)`子查询只返回`True`或者`False`，因此子查询中的`SELECT *`可以是`SELECT 1 OR SELECT X`，它们并没有区别
 - `EXISTS(subquery)`子查询的实际执行过程可能经过了优化而不是我们理解上的逐条对比，如果担心效率问题，可进行实际检验以确定是否有效率问题
 - `EXISTS(subquery)`子查询往往也可以用条件表达式，其他子查询或者`JOIN`替代，何种最优需要具体问题具体分析
-
-
 
 ## 12.2.ORDER BY优化
 
