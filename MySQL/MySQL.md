@@ -299,29 +299,29 @@ LIMIT               			# 9
 ![七种JOIN理论](https://img-blog.csdnimg.cn/20200801212011559.jpg?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L1JyaW5nb18=,size_16,color_FFFFFF,t_70)
 
 ```sql
-/* 1 */
+/* 1 */ 【A独有部分 + AB公有部分】
 SELECT <select_list> FROM TableA A LEFT JOIN TableB B ON A.Key = B.Key;
 
-/* 2 */
+/* 2 */ 【B独有部分 + AB公有部分】
 SELECT <select_list> FROM TableA A RIGHT JOIN TableB B ON A.Key = B.Key;
 
-/* 3 */
+/* 3 */ 【AB公有部分】
 SELECT <select_list> FROM TableA A INNER JOIN TableB B ON A.Key = B.Key;
 
-/* 4 */
+/* 4 */ 【A独有部分】
 SELECT <select_list> FROM TableA A LEFT JOIN TableB B ON A.Key = B.Key WHERE B.Key IS NULL;
 
-/* 5 */
+/* 5 */ 【B独有部分】
 SELECT <select_list> FROM TableA A RIGHT JOIN TableB B ON A.Key = B.Key WHERE A.Key IS NULL;
 
-/* 6 */
+/* 6 */ 【A独有部分 + AB公有部分 + B独有部分】
 SELECT <select_list> FROM TableA A FULL OUTER JOIN TableB B ON A.Key = B.Key;
 /* MySQL不支持FULL OUTER JOIN这种语法 可以改成 1+2 */
 SELECT <select_list> FROM TableA A LEFT JOIN TableB B ON A.Key = B.Key
 UNION
 SELECT <select_list> FROM TableA A RIGHT JOIN TableB B ON A.Key = B.Key;
 
-/* 7 */
+/* 7 */ 【A独有部分 + B独有部分】
 SELECT <select_list> FROM TableA A FULL OUTER JOIN TableB B ON A.Key = B.Key WHERE A.Key IS NULL OR B.Key IS NULL;
 /* MySQL不支持FULL OUTER JOIN这种语法 可以改成 4+5 */
 SELECT <select_list> FROM TableA A LEFT JOIN TableB B ON A.Key = B.Key WHERE B.Key IS NULL;
