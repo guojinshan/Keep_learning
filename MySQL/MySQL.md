@@ -725,8 +725,6 @@ INSERT INTO `article`(`author_id`, `category_id`, `views`, `comments`, `title`, 
 INSERT INTO `article`(`author_id`, `category_id`, `views`, `comments`, `title`, `content`) VALUES(1,1,4,4,'4','4');
 ```
 
-
-
 > 案例：查询`category_id`为1且`comments`大于1的情况下，`views`最多的`article_id`。
 
 1、编写SQL语句并查看SQL执行计划
@@ -796,9 +794,10 @@ CREATE INDEX idx_article_cv ON article(category_id,views);
 
 结论：可以看到type为ref，Extra中的Using filesort也消失了，结果非常理想
 
-9、同样，如果调整检索时`comments`和·views·的顺序，上述问题也能够迎刃而解，因此索引需要在不断的验证，尝试
+9、同样，如果调整检索时`comments`和`views`的顺序，上述问题也能够迎刃而解，因此索引需要在不断地验证，尝试
 ```
-CREATE INDEX idx_article_ccv ON article(category_id,views,comments);
+/* 创建索引 idx_article_cvc */
+CREATE INDEX idx_article_cvc ON article(category_id,views,comments);
 ```
 
 ## 9.2.两表索引分析
