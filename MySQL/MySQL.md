@@ -520,12 +520,12 @@ mysql> EXPLAIN SELECT * FROM pms_category \G;
 
 + 如果`possible_keys`不为`NULL`，`key`为`NULL`，称为索引失效
 + 如果`possible_keys`为`NULL`，`key`不为`NULL`，即该索引仅仅出现在`key`列表中，称为索引覆盖
-+ 当`SELECT`查询的字段和所键`复合索引`的`个数`和`顺序`刚好吻合时，会出现索引覆盖,此时`type`为`index`
++ 当`SELECT`查询的字段和所键`复合索引`的`个数`和`顺序`刚好吻合时，会出现索引覆盖，此时`type`为`index`
 + 当使用`SELECT *`，只要没有建立索引，都是使用全表扫描, `type`为`ALL`
 	
 > key_len
 
-`key_len`：表示索引中使用的字节数，可通过该列计算查询中使用的索引的长度。`key_len`显示的值为索引字段的最大可能长度，并非实际使用长度，即`key_len`是根据表定义计算而得，不是通过表内检索出的。在不损失精度的情况下，长度越短越好
+`key_len`：表示索引中使用的字节数，可通过该列计算查询中使用的索引的长度。`key_len`显示的值为索引字段的最大可能长度，并非实际使用长度，即`key_len`是根据表定义计算而得，不是通过表内检索出的。**在不损失精度的情况下，长度越短越好**
 
 `key_len`计算规则：**https://blog.csdn.net/qq_34930488/article/details/102931490**
 
@@ -565,22 +565,21 @@ possible_keys: PRIMARY
 
 > ref
 
-`ref`：显示索引的哪一列被使用了，如果可能的话，是一个常数。哪些列或常量被用于查找索引列上的值。
-
+`ref`：显示索引的哪一列被使用了，如果可能的话，是一个常数`const`，指明哪些列或常量被用于查找索引列上的值
 
 > rows
 
-`rows`：根据表统计信息及索引选用情况，大致估算出找到所需的记录需要读取的行数。
+`rows`：根据表统计信息及索引选用情况，大致估算出找到所需的记录需要读取的行数，即每张表有多少行被优化器查询，行数越少越好
 
 > Extra
 
-`Extra`：包含不适合在其他列中显示但十分重要的额外信息。
+`Extra`：包含不适合在其他列中显示但十分重要的额外信息
 
-- `Using filesort`：说明MySQL会对数据使用一个外部的索引排序，而不是按照表内的索引顺序进行读取。**MySQL中无法利用索引完成的排序操作成为"文件内排序"。**
+- `Using filesort`：说明MySQL会对数据使用一个外部的索引排序，而不是按照表内的索引顺序进行读取。**MySQL中无法利用索引完成的排序操作称为"文件内排序"(要避免-九死一生)** 。解决方法：在`ORDER BY`后使用所有未使用的索引，并遵循索引创建时的顺序
 
-```shell
+```
 # 排序没有使用索引
-mysql> explain select name from pms_category where name='Tangs' order by cat_level \G
+mysql> EXPLAIN SELECT name FROM pms_category WHERE name='Tangs' ORDER BY cat_level \G;
 *************************** 1. row ***************************
            id: 1
   select_type: SIMPLE
@@ -597,16 +596,15 @@ possible_keys: idx_name_parentCid_catLevel
 1 row in set, 1 warning (0.00 sec)
 
 #~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
-# 排序使用到了索引
-
-mysql> explain select name from pms_category where name='Tangs' order by parent_cid,cat_level\G
+# 排序使用到了索引 (使用所有升序未使用的索引进行排序)
+mysql> EXPLAIN SELECT name FROM pms_category WHERE name='Tangs' ORDER BY parent_cid,cat_level \G;
 *************************** 1. row ***************************
            id: 1
   select_type: SIMPLE
         table: pms_category
    partitions: NULL
          type: ref
-possible_keys: idx_name_parentCid_catLevel
+possible_keys: idx_name_parentCid_catLevel 
           key: idx_name_parentCid_catLevel
       key_len: 201
           ref: const
@@ -616,15 +614,51 @@ possible_keys: idx_name_parentCid_catLevel
 1 row in set, 1 warning (0.00 sec)
 ```
 
-- `Using temporary`：使用了临时表保存中间结果，MySQL在対查询结果排序时使用了临时表。常见于排序`order by`和分组查询`group by`。**临时表対系统性能损耗很大。**
+- `Using temporary`：使用了临时表保存中间结果，MySQL在対查询结果排序时使用了临时表。常见于排序`ORDER BY`和分组查询`GROUP BY`。**临时表対系统性能损耗很大(绝对要避免-十死无生)**. 解决方法：在`GROUP BY`后使用所有`WHERE`查询字段中对应的索引，并遵循索引创建时的顺序
+```
+# 分组没有使用索引
+mysql> EXPLAIN SELECT cat_level FROM pms_category WHERE cat_level in ('High','Very High') GROUP BY parentCid \G;
+*************************** 1. row ***************************
+           id: 1
+  select_type: SIMPLE
+        table: pms_category
+   partitions: NULL
+         type: range
+possible_keys: idx_name_parentCid_catLevel
+          key: idx_name_parentCid_catLevel
+      key_len: 201
+          ref: NULL
+         rows: 569
+     filtered: 100.00
+        Extra: Using where; Using index; Using temporary; Using filesort
+1 row in set, 1 warning (0.00 sec)
 
-- `Using index`：表示相应的`SELECT`操作中使用了覆盖索引，避免访问了表的数据行，效率不错！如果同时出现`Using where`，表示索引被用来执行索引键值的查找；如果没有同时出现`Using where`，表明索引用来读取数据而非执行查找动作。
+#~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+# 分组使用到了索引
+mysql> EXPLAIN SELECT cat_level FROM pms_category WHERE cat_level in ('High','Very High') GROUP BY  pms_category, parentCid \G;
+*************************** 1. row ***************************
+           id: 1
+  select_type: SIMPLE
+        table: pms_category
+   partitions: NULL
+         type: range
+possible_keys: idx_name_parentCid_catLevel 
+          key: idx_name_parentCid_catLevel
+      key_len: 402
+          ref: NULL
+         rows: 4
+     filtered: 100.00
+        Extra: Using where; Using index for group-by
+1 row in set, 1 warning (0.00 sec)
+```
 
-```shell
+- `Using index`：表示相应的`SELECT`操作中使用了覆盖索引(Convering Index)，避免访问了表的数据行，效率不错！如果同时出现`Using where`，表示索引被用来执行索引键值的查找；如果没有同时出现`Using where`，表明索引用来读取数据而非执行查找动作
+
+```
 # 覆盖索引
-# 就是select的数据列只用从索引中就能够取得，不必从数据表中读取，换句话说查询列要被所使用的索引覆盖。
-# 注意：如果要使用覆盖索引，一定不能写SELECT *，要写出具体的字段。
-mysql> explain select cat_id from pms_category \G;
+# 就是select的数据列只用从索引中就能够取得，不必从数据表中读取，即MySQ可以利用索引返回SELECT列表中的字段，而不必根据索引再次读取数据文件，换句话说查询列要被所使用的索引覆盖
+# 注意：如果要使用覆盖索引，一定不能写SELECT *，要写出具体的字段
+mysql> EXPLAIN SELECT cat_id FROM pms_category \G;
 *************************** 1. row ***************************
            id: 1
   select_type: SIMPLE
@@ -637,16 +671,18 @@ possible_keys: NULL
           ref: NULL
          rows: 1425
      filtered: 100.00
-        Extra: Using index   # select的数据列只用从索引中就能够取得，不必从数据表中读取   
+        Extra: Using index   # SELECT的数据列只用从索引中就能够取得，不必执行查找动作从数据表中读取   
 1 row in set, 1 warning (0.00 sec)
 ```
 
-- `Using where`：表明使用了`WHERE`过滤。
-- `Using join buffer`：使用了连接缓存。
-- `impossible where`：`WHERE`子句的值总是false，不能用来获取任何元组。
+- `Using where`：表明使用了`WHERE`过滤
+- `Using join buffer`：使用了连接缓存
+- `impossible where`：`WHERE`子句的值总是false，不能用来获取任何元组
+- `select tables optimized way`：在没有GROUP BY子句的情况下，基于索引优化MIN/MAX操作或者对于MyISAM存储引擎执行优化COUNT(*)操作，不必等到执行阶段再进行计算，查询执行计划生成的阶段即完成优化
+- `distinct`：优化distinct操作，在找到第一匹配的元组后即停止找同样的动作
 
-```shell
-mysql> explain select name from pms_category where name = 'zs' and name = 'ls'\G
+```
+mysql> EXPLAIN SELECT name FROM pms_category where name = 'zs' and name = 'ls'\G
 *************************** 1. row ***************************
            id: 1
   select_type: SIMPLE
