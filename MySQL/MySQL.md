@@ -804,7 +804,7 @@ CREATE INDEX idx_article_cvc ON article(category_id,views,comments);
 
 > 数据准备
 
-```sql
+```
 DROP TABLE IF EXISTS `class`;
 DROP TABLE IF EXISTS `book`;
 
@@ -817,17 +817,21 @@ CREATE TABLE IF NOT EXISTS `book`(
 `bookid` INT(10) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
 `card` INT(10) UNSIGNED NOT NULL COMMENT '分类'
 ) COMMENT '书籍';
+
+各执行20次，在class表和book表中中插入20条数据
+INSERT INTO class(card) VALUES(FLOOR(1 + (RAND() * 20)));
+INSERT INTO book(card) VALUES(FLOOR(1 + (RAND() * 20)));
 ```
 
 > 两表连接查询的SQL执行计划
 
-1、不创建索引的情况下，SQL的执行计划。
+1、不创建索引的情况下，SQL的执行计划
 
 ![explain](https://img-blog.csdnimg.cn/20200803143557187.png)
 
 `book`和`class`两张表都是没有使用索引，全表扫描，那么如果进行优化，索引是创建在`book`表还是创建在`class`表呢？下面进行大胆的尝试！
 
-2、左表(`book`表)创建索引。
+2、左表(`book`表)创建索引
 
 创建索引`idx_book_card`
 
@@ -842,7 +846,7 @@ CREATE INDEX idx_book_card ON book(card);
 
 
 
-3、删除`book`表的索引，右表(`class`表)创建索引。
+3、删除`book`表的索引，右表(`class`表)创建索引
 
 创建索引`idx_class_card`
 
