@@ -729,7 +729,7 @@ INSERT INTO `article`(`author_id`, `category_id`, `views`, `comments`, `title`, 
 
 > 案例：查询`category_id`为1且`comments`大于1的情况下，`views`最多的`article_id`。
 
-1、编写SQL语句并查看SQL执行计划。
+1、编写SQL语句并查看SQL执行计划
 
 ```shell
 # 1、sql语句
@@ -742,30 +742,30 @@ mysql> EXPLAIN SELECT id,author_id FROM article WHERE category_id = 1 AND commen
   select_type: SIMPLE
         table: article
    partitions: NULL
-         type: ALL
+         type: ALL 
 possible_keys: NULL
           key: NULL
       key_len: NULL
           ref: NULL
          rows: 5
      filtered: 20.00
-        Extra: Using where; Using filesort  # 产生了文件内排序，需要优化SQL
+        Extra: Using where; Using filesort
 1 row in set, 1 warning (0.00 sec)
 ```
+结论：很显然，type为ALL(全表扫描), 即最坏的情况；Extra中出现了Using filesort(文件内排序), 也是最坏的情况。必须手动建立索引进行优化
 
 
-
-2、创建索引`idx_article_ccv`。
+2、创建索引`idx_article_ccv`
 
 ```sql
 CREATE INDEX idx_article_ccv ON article(category_id,comments,views);
 ```
 
-3、查看当前索引。
+3、查看当前索引
 
 ![show index](https://img-blog.csdnimg.cn/20200803134154162.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L1JyaW5nb18=,size_16,color_FFFFFF,t_70)
 
-4、查看现在SQL语句的执行计划。
+4、查看现在SQL语句的执行计划
 
 ![explain](https://img-blog.csdnimg.cn/20200803134549914.png)
 
