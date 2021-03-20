@@ -516,6 +516,7 @@ mysql> EXPLAIN SELECT * FROM pms_category \G;
 > possible_keys 和 key
 
 `possible_keys`：显示可能应用在这张表中的索引，一个或者多个。查询涉及到的字段上若存在索引，则该索引将被列出，**但实际上不一定被查询使用**
+
 `key`：实际使用的索引，如果为`NULL`，则没有使用索引
 	+ 如果`possible_keys`不为`NULL`，`key`为`NULL`，称为索引失效
 	+ 如果`possible_keys`为`NULL`，`key`不为`NULL`，即该索引仅仅出现在`key`列表中，称为索引覆盖
@@ -525,9 +526,10 @@ mysql> EXPLAIN SELECT * FROM pms_category \G;
 > key_len
 
 `key_len`：表示索引中使用的字节数，可通过该列计算查询中使用的索引的长度。`key_len`显示的值为索引字段的最大可能长度，并非实际使用长度，即`key_len`是根据表定义计算而得，不是通过表内检索出的。在不损失精度的情况下，长度越短越好
+
 `key_len`计算规则：**https://blog.csdn.net/qq_34930488/article/details/102931490**
 
-```shell
+```
 mysql> desc pms_category;
 +---------------+------------+------+-----+---------+----------------+
 | Field         | Type       | Null | Key | Default | Extra          |
