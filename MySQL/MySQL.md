@@ -967,16 +967,16 @@ EXPLAIN SELECT * FROM `staffs` WHERE `name` = 'Ringo' AND `pos` = 'manager';
 
 > 概念
 
-**最佳左前缀法则：如果索引是多字段的复合索引，要遵守最佳左前缀法则。指的是查询从索引的最左前列开始并且不跳过索引中的字段。**
+最佳左前缀法则：如果索引是多字段的复合索引，要遵守最佳左前缀法则。指的是查询从索引的**最左前列开始并且不跳过索引中的字段**
 
-**口诀：带头大哥不能死，中间兄弟不能断。**
+**口诀：带头大哥不能死，中间兄弟不能断**
 
 ## 10.3.索引列上不计算
 
 > 案例
 
-```shell
-# 现在要查询`name` = 'Ringo'的记录下面有两种方式来查询！
+```
+# 现在要查询`name` = 'Ringo'的记录，下面有两种方式来查询！
 
 # 1、直接使用 字段 = 值的方式来计算
 mysql> SELECT * FROM `staffs` WHERE `name` = 'Ringo';
@@ -997,21 +997,19 @@ mysql> SELECT * FROM `staffs` WHERE LEFT(`name`, 5) = 'Ringo';
 1 row in set (0.00 sec)
 ```
 
-我们发现以上两条SQL的执行结果都是一样的，但是执行效率有没有差距呢？？？
-
-通过分析两条SQL的执行计划来分析性能。
+我们发现以上两条SQL的执行结果都是一样的，但是执行效率有没有差距呢？我们通过分析两条SQL的执行计划来分析性能：
 
 ![explain](https://img-blog.csdnimg.cn/20200803171857325.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L1JyaW5nb18=,size_16,color_FFFFFF,t_70)
 
-**由此可见，在索引列上进行计算，会使索引失效。**
+结论：不要在索引列上做任何操作(计算、函数、(自动或手动)类型转换)，会导致索引失效而转向全表扫描
 
-**口诀：索引列上不计算。**
+**口诀：索引列上少/不计算**
 
 ## 10.4.范围之后全失效
 
 > 案例
 
-```sql
+```
 /* 用到了idx_staffs_name_age_pos索引中的name，age，pos字段 这是属于全值匹配的情况！！！*/
 EXPLAIN SELECT * FROM `staffs` WHERE `name` = 'Ringo' AND `age` = 18 AND `pos` = 'manager';
 
@@ -1024,13 +1022,11 @@ EXPLAIN SELECT * FROM `staffs` WHERE `name` = '张三' AND `age` > 18 AND `pos` 
 
 ![explain](https://img-blog.csdnimg.cn/20200803173357787.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L1JyaW5nb18=,size_16,color_FFFFFF,t_70)
 
-**由此可知，查询范围的字段使用到了索引，但是范围之后的索引字段会失效。**
+结论：查询范围的字段使用到了索引，但是范围之后的索引字段会失效，存储引擎不能使用索引中范围条件右边的列
 
-**口诀：范围之后全失效。**
+**口诀：范围之后全失效**
 
 ## 10.5.覆盖索引尽量用
-
-在写SQL的不要使用`SELECT *`，用什么字段就查询什么字段。
 
 ```sql
 /* 没有用到覆盖索引 */
@@ -1042,27 +1038,28 @@ EXPLAIN SELECT `name`, `age`, `pos` FROM `staffs` WHERE `name` = 'Ringo' AND `ag
 
 ![使用覆盖索引](https://img-blog.csdnimg.cn/20200803213031893.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L1JyaW5nb18=,size_16,color_FFFFFF,t_70)
 
+结论：尽量使用覆盖索引(只访问索引的查询(索引列和查询列一致))，减少`SELECT *`，用什么字段就查询什么字段
 
-
-**口诀：查询一定不用`*`**。
-
-
+**口诀：查询一定不用`*`**
 
 ## 10.6.不等有时会失效
 
-```sql
+```
 /* 会使用到覆盖索引 */
 EXPLAIN SELECT `name`, `age`, `pos` FROM `staffs` WHERE `name` != 'Ringo';
 
 /* 索引失效 全表扫描 */
 EXPLAIN SELECT * FROM `staffs` WHERE `name` != 'Ringo';
+
+/* 索引失效 全表扫描 */
+EXPLAIN SELECT * FROM `staffs` WHERE `name` <> 'Ringo';
 ```
 
-
+结论：MySQL使用不等于(!= 或者 <>)的时候，无法使用索引会导致全表扫描
 
 ## 10.7.like百分加右边
 
-```sql
+```
 /* 索引失效 全表扫描 */
 EXPLAIN SELECT * FROM `staffs` WHERE `name` LIKE '%ing%';
 
@@ -1070,16 +1067,16 @@ EXPLAIN SELECT * FROM `staffs` WHERE `name` LIKE '%ing%';
 EXPLAIN SELECT * FROM `staffs` WHERE `name` LIKE '%ing';
 
 /* 使用索引范围查询 */
-EXPLAIN SELECT * FROM `staffs` WHERE `name` LIKE 'Rin%';
+EXPLAIN SELECT * FROM `staffs` WHERE `name` LIKE 'Ring%';
 ```
 
-**口诀：`like`百分加右边。**
+结论：like以通配符开头('%abc...'), MySQL索引失效会变成全表扫描
 
+**口诀：`like`百分加右边**
 
+如果一定要使用`%字符串%`，而且还要保证索引不失效，那么使用**覆盖索引**来编写SQL：
 
-如果一定要使用`%like`，而且还要保证索引不失效，那么使用覆盖索引来编写SQL。
-
-```sql
+```
 /* 使用到了覆盖索引 */
 EXPLAIN SELECT `id` FROM `staffs` WHERE `name` LIKE '%in%';
 
@@ -1110,13 +1107,12 @@ EXPLAIN SELECT `name`, `age`, `pos`, `add_time` FROM `staffs` WHERE `name` LIKE 
 
 ![模糊查询百分号一定加前边](https://img-blog.csdnimg.cn/20200803220743206.png)
 
+**口诀：覆盖索引保两边**
 
 
-**口诀：覆盖索引保两边。**
+## 10.8.字符要加单引号（一定不要忘记，开发过程中会被骂死）
 
-## 10.8.字符要加单引号
-
-```sql
+```
 /* 使用到了覆盖索引 */
 EXPLAIN SELECT `id`, `name` FROM `staffs` WHERE `name` = 'Ringo';
 
@@ -1125,34 +1121,31 @@ EXPLAIN SELECT `id`, `name` FROM `staffs` WHERE `name` = 2000;
 
 /* 索引失效 全表扫描 */
 EXPLAIN SELECT * FROM `staffs` WHERE `name` = 2000;
+(这里name = 2000在MySQL中会发生强制类型转换，将数字转成字符串)
 ```
 
-这里name = 2000在MySQL中会发生强制类型转换，将数字转成字符串。
+**口诀：字符要加单引号**
 
+## 10.9.少用OR
 
+```
+/* 索引失效 全表扫描 */
+EXPLAIN SELECT * FROM `staffs` WHERE `name` = 'Ringo' OR name='张三';
+```
 
-**口诀：字符要加单引号。**
-
-
-
-## 10.9.索引相关题目
+## 10.10.索引相关题目
 
 **假设index(a,b,c)**
 
-| Where语句                                               | 索引是否被使用                             |
+| Where语句                                               | 索引是否被使用                               |
 | ------------------------------------------------------- | ------------------------------------------ |
-| where a = 3                                             | Y，使用到a                                 |
-| where a = 3 and b = 5                                   | Y，使用到a，b                              |
-| where a = 3 and b = 5                                   | Y，使用到a，b，c                           |
-| where b = 3 或者 where b = 3 and c = 4 或者 where c = 4 | N，没有用到a字段                           |
-| where a = 3 and c = 5                                   | 使用到a，但是没有用到c，因为b断了          |
-| where a = 3 and b > 4 and c = 5                         | 使用到a，b，但是没有用到c，因为c在范围之后 |
-| where a = 3 and b like 'kk%' and c = 4                  | Y，a，b，c都用到                           |
-| where a = 3 and b like '%kk' and c = 4                  | 只用到a                                    |
-| where a = 3 and b like '%kk%' and c = 4                 | 只用到a                                    |
-| where a = 3 and b like 'k%kk%' and c = 4                | Y，a，b，c都用到                           |
-
-
+| where a = 3                                             | Y，使用到a                                  |
+| where a = 3 and b = 5                                   | Y，使用到a，b                               |
+| where a = 3 and b = 5                                   | Y，使用到a，b，c                            |
+| where b = 3 或者 where b = 3 and c = 4 或者 where c = 4  | N，没有用到a字段                            |
+| where a = 3 and c = 5                                   | 使用到a，但是没有用到c，因为b断了             |
+| where a = 3 and b > 4 and c = 5                         | 使用到a，b，但是没有用到c，因为c在范围之后     |
+| where a = 3 and b like 'kk%' and c = 4                  | a, b能用,c不用用			            |
 
 ## 10.10.面试题分析
 
@@ -1232,8 +1225,6 @@ EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND  `c2` = 'a2' AND `c5` = 'a5
 */
 EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND `c2` = 'a2' AND `c5` = 'a5' ORDER BY c3, c2;
 
-
-
 /* GROUP BY 表面上是叫做分组，但是分组之前必定排序。 */
 
 /* 14.用到c1 c2 c3三个字段，c1用于查找，c2 c3用于排序，c4失效 */
@@ -1245,8 +1236,6 @@ EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND `c4` = 'a4' GROUP BY `c3`,`
 
 `GROUP BY`基本上都需要进行排序，索引优化几乎和`ORDER BY`一致，但是`GROUP BY`会有临时表的产生。
 
-
-
 ## 10.11.总结
 
 索引优化的一般性建议：
@@ -1256,23 +1245,17 @@ EXPLAIN SELECT * FROM `test03` WHERE `c1` = 'a1' AND `c4` = 'a4' GROUP BY `c3`,`
 - 在选择复合索引的时候，尽量选择可以能够包含当前`query`中的`where`子句中更多字段的索引。
 - 尽可能通过分析统计信息和调整`query`的写法来达到选择合适索引的目的。
 
-
-
 口诀：
 
-- 带头大哥不能死。
-- 中间兄弟不能断。
-- 索引列上不计算。
-- 范围之后全失效。
-- 覆盖索引尽量用。
-- 不等有时会失效。
-- like百分加右边。
-- 字符要加单引号。
-- 一般SQL少用or。
-
-
-
-
+- 带头大哥不能死
+- 中间兄弟不能断
+- 索引列上不计算
+- like百分加右边
+- 范围之后全失效
+- 覆盖索引尽量用
+- 不等有时会失效
+- 字符串里有单引号
+- 一般SQL少用OR
 
 # 11.分析慢SQL的步骤
 
