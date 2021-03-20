@@ -466,99 +466,60 @@ MySQL中有专门负责优化SELECT语句的优化器模块，其主要功能是
 ## 8.3.EXPLAIN简介
 > EXPLAIN是什么？
 
-EXPLAIN：SQL的执行计划，使用EXPLAIN关键字可以模拟优化器执行SQL查询语句，从而知道MySQL是如何处理SQL语句的。
+MySQL的查询执行计划，使用EXPLAIN关键字可以模拟优化器执行SQL查询语句，从而知道MySQL是如何处理SQL语句的，便于分析查询语句或是表结构的性能瓶颈
 
-> EXPLAIN怎么使用？
+> EXPLAIN如何使用？
 
-语法：`explain` + `SQL`。
-
-```shell
-mysql> explain select * from pms_category \G;
-*************************** 1. row ***************************
-           id: 1
-  select_type: SIMPLE
-        table: pms_category
-   partitions: NULL
-         type: ALL
-possible_keys: NULL
-          key: NULL
-      key_len: NULL
-          ref: NULL
-         rows: 1425
-     filtered: 100.00
-        Extra: NULL
-1 row in set, 1 warning (0.00 sec)
+语法：`EXPLAIN` + `SQL语句`
 ```
+mysql> EXPLAIN SELECT * FROM exposition_temporaire \G;
+*************************** 1. row ***************************
++----+-------------+------+------------+------+---------------+------+---------+------+------+----------+-------+
+| id | select_type | table| partitions | type | possible_keys | key  | key_len | ref  | rows | filtered | Extra |
++----+-------------+------+------------+------+---------------+------+---------+------+------+----------+-------+
+|  1 | SIMPLE      | exposition_temporaire | NULL| ALL  | NULL | NULL | NULL   | NULL |   4  |   100 	| NULL  |
++----+-------------+------+------------+------+---------------+------+---------+------+------+----------+-------+
 
-> EXPLAIN能干嘛？
+## 8.4.EXPLAIN结果字段详细解读
 
-可以查看以下信息：
-
-- `id`：表的读取顺序。
-- `select_type`：数据读取操作的操作类型。
-- `possible_keys`：哪些索引可以使用。
-- `key`：哪些索引被实际使用。
-- `ref`：表之间的引用。
-- `rows`：每张表有多少行被优化器查询。
-
-## 8.2.EXPLAIN字段
-
-> id
-
-`id`：表的读取和加载顺序。
+> `id`：表的读取和加载顺序
 
 值有以下三种情况：
+- `id`相同：执行顺序由上至下
+- `id`不同：如果是子查询，id的序号会递增，**id值越大优先级越高，越先被执行**
+- `id`相同不同，同时存在：**永远是id大的优先级最高，id相等的时候顺序执行**
 
-- `id`相同，执行顺序由上至下。
-- `id`不同，如果是子查询，id的序号会递增，**id值越大优先级越高，越先被执行。**
-- `id`相同不同，同时存在。**永远是id大的优先级最高，id相等的时候顺序执行。**
+> `select_type`：数据查询的类型，主要是用于区别普通查询、联合查询、子查询等的复杂查询
 
+- `SIMPLE`：简单的`SELECT`查询，查询中不包含子查询或者`UNION`
+- `PRIMARY`：查询中若包含任何复杂的子部分，最外层查询则被标记为`PRIMARY`
+- `SUBQUERY`：在`SELECT`或者`WHERE`子句中包含了子查询
+- `DERIVED`：在`FROM`子句中包含的子查询被标记为`DERIVED(衍生)`，MySQL会递归执行这些子查询，把结果放在临时表中
+- `UNION`：如果第二个`SELECT`出现在`UNION`之后，则被标记为`UNION`；若`UNION`包含在`FROM`子句的子查询中，外层`SELECT`将被标记为`DERIVED`
+- `UNION RESULT`：从`UNION`表获取结果的`SELECT`
 
+> `type`：访问类型排列
 
-> select_type
+**从最好到最差依次是：**`system`>`const`>`eq_ref`>`ref`>`range`>`index`>`ALL`，除了`ALL`没有用到索引，其他级别都用到了索引
 
-`select_type`：数据查询的类型，主要是用于区别，普通查询、联合查询、子查询等的复杂查询。
+一般来说，得保证查询至少达到`range`级别，最好达到`ref`
 
-- `SIMPLE`：简单的`SELECT`查询，查询中不包含子查询或者`UNION `。
-- `PRIMARY`：查询中如果包含任何复杂的子部分，最外层查询则被标记为`PRIMARY`。
-- `SUBQUERY`：在`SELECT`或者`WHERE`子句中包含了子查询。
-- `DERIVED`：在`FROM`子句中包含的子查询被标记为`DERIVED(衍生)`，MySQL会递归执行这些子查询，把结果放在临时表中。
-- `UNION`：如果第二个`SELECT`出现在`UNION`之后，则被标记为`UNION`；若`UNION`包含在`FROM`子句的子查询中，外层`SELECT`将被标记为`DERIVED`。
-- `UNION RESULT`：从`UNION`表获取结果的`SELECT`。
-
-
-
-> type
-
-`type`：访问类型排列。
-
-**从最好到最差依次是：**`system`>`const`>`eq_ref`>`ref`>`range`>`index`>`ALL`。除了`ALL`没有用到索引，其他级别都用到索引了。
-
-一般来说，得保证查询至少达到`range`级别，最好达到`ref`。
-
-- `system`：表只有一行记录（等于系统表），这是`const`类型的特例，平时不会出现，这个也可以忽略不计。
-- `const`：表示通过索引一次就找到了，`const`用于比较`primary key`或者`unique`索引。因为只匹配一行数据，所以很快。如将主键置于`where`列表中，MySQL就能将该查询转化为一个常量。
-- `eq_ref`：唯一性索引扫描，读取本表中和关联表表中的每行组合成的一行，查出来只有一条记录。除 了 `system` 和` const` 类型之外, 这是最好的联接类型。
-- `ref`：非唯一性索引扫描，返回本表和关联表某个值匹配的所有行，查出来有多条记录。
-- `range`：只检索给定范围的行，一般就是在`WHERE`语句中出现了`BETWEEN`、`< >`、`in`等的查询。这种范围扫描索引比全表扫描要好，因为它只需要开始于索引树的某一点，而结束于另一点，不用扫描全部索引。
-- `index`：`Full Index Scan`，全索引扫描，`index`和`ALL`的区别为`index`类型只遍历索引树。**也就是说虽然`ALL`和`index`都是读全表，但是`index`是从索引中读的，`ALL`是从磁盘中读取的。**
-
-- `ALL`：`Full Table Scan`，没有用到索引，全表扫描。
-
-
+- `system`：表只有一行记录（等于系统表），这是`const`类型的特例，平时不会出现，这个也可以忽略不计
+- `const`：表示通过**索引1次**就找到了，`const`用于比较`primary key`或者`unique`索引。因为只匹配一行数据，所以很快。如将主键置于`where`列表中，MySQL就能将该查询转化为一个常量
+- `eq_ref`：唯一性索引扫描，对于每个索引键，表中只有一条记录与之匹配，常用于主键或唯一索引扫描。除 了 `system` 和` const` 类型之外, 这是最好的联接类型
+- `ref`：非唯一性索引扫描，返回本表和关联表某个值匹配的所有行，可能查出来有多条记录
+- `range`：只检索给定范围的行，一般就是在`WHERE`语句中出现了`BETWEEN`、`< >`、`in`等的查询。这种范围扫描索引比全表扫描要好，因为它只需要开始于索引树的某一点，而结束于另一点，不用扫描全部索引
+- `index`：`Full Index Scan`，全索引扫描，`index`和`ALL`的区别为`index`类型只遍历索引树，**也就是说虽然`ALL`和`index`都是读全表，但是`index`是从索引中读的，`ALL`是从磁盘中读取的**
+- `ALL`：`Full Table Scan`，没有用到索引，全表扫描
 
 > possible_keys 和 key
 
 `possible_keys`：显示可能应用在这张表中的索引，一个或者多个。查询涉及到的字段上若存在索引，则该索引将被列出，**但不一定被查询实际使用。**
-
-`key`：实际使用的索引。如果为`NULL`，则没有使用索引。查询中如果使用了覆盖索引，则该索引仅仅出现在`key`列表中。
-
-
+`key`：实际使用的索引。如果为`NULL`，则没有使用索引。查询中如果使用了覆盖索引，则该索引仅仅出现在`key`列表中
 
 > key_len
 
-`key_len`：表示索引中使用的字节数，可通过该列计算查询中使用的索引的长度。`key_len`显示的值为索引字段的最大可能长度，并非实际使用长度，即`key_len`是根据表定义计算而得，不是通过表内检索出的。在不损失精度的情况下，长度越短越好。
-
+`key_len`：表示索引中使用的字节数，可通过该列计算查询中使用的索引的长度。`key_len`显示的值为索引字段的最大可能长度，并非实际使用长度，即`key_len`是根据表定义计算而得，不是通过表内检索出的。在不损失精度的情况下，长度越短越好
 `key_len`计算规则：**https://blog.csdn.net/qq_34930488/article/details/102931490**
 
 ```shell
@@ -578,7 +539,6 @@ mysql> desc pms_category;
 +---------------+------------+------+-----+---------+----------------+
 9 rows in set (0.00 sec)
 
-
 mysql> explain select cat_id from pms_category where cat_id between 10 and 20 \G;
 *************************** 1. row ***************************
            id: 1
@@ -596,19 +556,14 @@ possible_keys: PRIMARY
 1 row in set, 1 warning (0.00 sec)
 ```
 
-
-
 > ref
 
 `ref`：显示索引的哪一列被使用了，如果可能的话，是一个常数。哪些列或常量被用于查找索引列上的值。
 
 
-
 > rows
 
 `rows`：根据表统计信息及索引选用情况，大致估算出找到所需的记录需要读取的行数。
-
-
 
 > Extra
 
