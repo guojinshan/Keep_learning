@@ -859,28 +859,29 @@ CREATE INDEX idx_class_card ON class(card);
 
 ![explain](https://img-blog.csdnimg.cn/20200803145030597.png)
 
-**由此可见，左连接将索引创建在右表上更合适，右连接将索引创建在左表上更合适。**
+由此可见，**左连接将索引创建在右表上更合适**，这是由左连接特性决定的，左连接条件用于确定如何从右边开始搜索行，左边一定都有，所以右边是我们的关键点，一定需要建立索引。同样，**右连接将索引创建在左表上更合适**
 
 ## 9.3.三张表索引分析
 
 > 数据准备
 
-```sql
+```
 DROP TABLE IF EXISTS `phone`;
 
 CREATE TABLE IF NOT EXISTS `phone`(
 `phone_id` INT(10) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
 `card` INT(10) UNSIGNED NOT NULL COMMENT '分类' 
 ) COMMENT '手机';
+
+INSERT INTO phone(card) VALUES(FLOOR(1 + (RAND() * 20)));  
+
 ```
 
 > 三表连接查询SQL优化
 
-1、不加任何索引，查看SQL执行计划。
+1、不加任何索引，查看SQL执行计划
 
 ![explain](https://img-blog.csdnimg.cn/20200803160631786.png)
-
-
 
 2、根据两表查询优化的经验，左连接需要在右表上添加索引，所以尝试在`book`表和`phone`表上添加索引。
 
@@ -892,7 +893,7 @@ CREATE INDEX idx_book_card ON book(card);
 CREATE INDEX idx_phone_card ON phone(card);
 ```
 
-再次执行SQL的执行计划
+3、再次执行SQL的执行计划
 
 ![explain](https://img-blog.csdnimg.cn/20200803161013880.png)
 
