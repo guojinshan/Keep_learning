@@ -409,7 +409,7 @@ ALTER TABLE tabName ADD INDEX indexName(column_list);
 ALTER TABLE tabName ADD FULLTEXT indexName(column_list);
 ```
 
-## 7.3MySQL索引数据结构
+## 7.3.MySQL索引数据结构
 
 索引数据结构：
 - `BTree`索引
@@ -422,20 +422,15 @@ ALTER TABLE tabName ADD FULLTEXT indexName(column_list);
 ![BTree](https://img-blog.csdnimg.cn/20200801233134931.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L1JyaW5nb18=,size_16,color_FFFFFF,t_70)
 
 ## 7.4.哪些情况需要建索引
-
 - 主键自动建立主键索引（唯一 + 非空）。
 - 频繁作为查询条件的字段应该创建索引。
 - 查询中与其他表关联的字段，外键关系建立索引。
 - 查询中排序的字段，排序字段若通过索引去访问将大大提高排序速度。
 - 查询中统计或者分组字段（group by也和索引有关）。
 
-
-
 ## 7.5.那些情况不要建索引
-
 - 记录太少的表。
 - 经常增删改的表。
-
 - 频繁更新的字段不适合创建索引。
 - Where条件里用不到的字段不创建索引。
 - 假如一个表有10万行记录，有一个字段A只有true和false两种值，并且每个值的分布概率大约为50%，那么对A字段建索引一般不会提高数据库的查询速度。索引的选择性是指索引列中不同值的数目与表中记录数的比。如果一个表中有2000条记录，表索引列有1980个不同的值，那么这个索引的选择性就是1980/2000=0.99。一个索引的选择性越接近于1，这个索引的效率就越高。
@@ -445,11 +440,9 @@ ALTER TABLE tabName ADD FULLTEXT indexName(column_list);
 ## 8.1.EXPLAIN简介
 
 > EXPLAIN是什么？
-
 EXPLAIN：SQL的执行计划，使用EXPLAIN关键字可以模拟优化器执行SQL查询语句，从而知道MySQL是如何处理SQL语句的。
 
 > EXPLAIN怎么使用？
-
 语法：`explain` + `SQL`。
 
 ```shell
