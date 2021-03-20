@@ -769,26 +769,28 @@ CREATE INDEX idx_article_ccv ON article(category_id,comments,views);
 
 ![explain](https://img-blog.csdnimg.cn/20200803134549914.png)
 
-我们发现，创建符合索引`idx_article_ccv`之后，虽然解决了全表扫描的问题，但是在`order by`排序的时候没有用到索引，MySQL居然还是用的`Using filesort`，为什么？
+我们发现，创建符合索引`idx_article_ccv`之后，虽然解决了全表扫描的问题，但是在`ORDER BY`排序的时候没有用到索引，MySQL居然还是用的`Using filesort`
 
-5、我们试试把SQL修改为`SELECT id,author_id FROM article WHERE category_id = 1 AND comments = 1 ORDER BY views DESC LIMIT 1;`看看SQL的执行计划。
+5、我们试试把SQL修改为`SELECT id,author_id FROM article WHERE category_id = 1 AND comments = 1 ORDER BY views DESC LIMIT 1;`看看SQL的执行计划
 
 ![explain](https://img-blog.csdnimg.cn/20200803135228945.png)
 
-推论：当`comments > 1`的时候`order by`排序`views`字段索引就用不上，但是当`comments = 1`的时候`order by`排序`views`字段索引就可以用上！！！**所以，范围之后的索引会失效。**
+推论：当`comments > 1`的时候`ORDER BY`排序`views`字段索引就用不上，但是当`comments = 1`的时候`ORDER BY`排序`views`字段索引就可以用上！！！**所以，范围之后的索引会失效。**
 
-6、我们现在知道**范围之后的索引会失效**，原来的索引`idx_article_ccv`最后一个字段`views`会失效，那么我们如果删除这个索引，创建`idx_article_cv`索引呢？？？？
+6、我们现在知道**范围之后的索引会失效**，原来的索引`idx_article_ccv`最后一个字段`views`会失效，那么我们如果删除`comments`这个索引，创建`idx_article_cv`索引呢？ (大胆假设，小心求证)
 
-```sql
+```
+/* 删除索引 idx_article_cv */
+DROP INDEX idx_article_ccv ON article;
 /* 创建索引 idx_article_cv */
 CREATE INDEX idx_article_cv ON article(category_id,views);
 ```
 
-查看当前的索引
+7、查看当前的索引
 
 ![show index](https://img-blog.csdnimg.cn/20200803140542912.png)
 
-7、当前索引是`idx_article_cv`，来看一下SQL执行计划。
+8、当前索引是`idx_article_cv`，来看一下SQL执行计划
 
 ![explain](https://img-blog.csdnimg.cn/20200803140951803.png)
 
