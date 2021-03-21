@@ -1822,7 +1822,7 @@ mysql> SHOW PROFILE CPU,BLOCK IO FOR QUERY 3;
 - `Copying to tmp table`：把内存中的临时表复制到磁盘，非常危险！！！
 - `locked`：死锁
 
-> 全局查询日志(只能用在测试环境，永远不要用在生产环境, 否则人就没了)
+> 全局查询日志(只能用在测试环境，永远不要用在生产环境, 否则人就没了, 一般不要使用，优先选择`Show Profile`)
 
 ```
 # 查看是否开启全局日志查询
@@ -1853,14 +1853,31 @@ mysql> SELECT * FROM mysql.general_log;
 +----------------------------+------------------------------+----+---+--------+---------------------------------+
 ```
 
-# 16.表锁(偏读)
+# 16.数据库锁理论
+
+> 什么是锁？
+
+锁是计算机协调多个进程或线程并发访问某一资源的机制，在数据库中，除传统的计算资源(如CPU, RAM，I/O等)的争用外，数据也是一种供许多用户共享的资源。如何保证数据并发访问的一致性，有效性是所有数据库必须解决的一个问题，锁冲突也是影响数据库并发访问性能的一个重要因素，从这个角度来讲，锁对数据库而言显得尤为重要，也更加复杂
+
+当你想在在淘宝买一样商品，此时商品只有一件库存，加入这个时候还有另一个人要买，那么如何解决是你买到还是另一个人买到的问题呢？这里肯定要用到事务，我们先从库存中取出商品的数量，然后插入订单，付款后插入付款表信息，然后更新商品数量。在这个过程中，锁可以对有限的资源进行保护，解决隔离和并发的矛盾
+
+> 锁的分类
+
++ 按对操作数据的类型分为：读锁和写锁   
+	读锁(共享锁)：针对同一份数据，读个读操作可以同时进行而不会互相影响
+	
+	写锁(排他锁)：当前写操作没有完成前，它会阻断其他锁和读锁
+
++ 按对数据操作的粒度分为：表锁、行锁、页锁
+	基于开销、加锁速度、死锁、粒度、并发性能等因素的考量，只能就具体应用的特点说明哪种锁更适合
+
+# 16.1表锁(偏读)
 
 **表锁特点：**
 
-- 表锁偏向`MyISAM`存储引擎，开销小，加锁快，无死锁，锁定粒度大，发生锁冲突的概率最高，并发度最低。
+- 表锁偏向`MyISAM`存储引擎，开销小，加锁快，无死锁，锁定粒度大，发生锁冲突的概率最高，并发度最低
 
-
-## 16.1.环境准备
+## 16.1.1环境准备
 
 ```mysql
 # 1、创建表
@@ -1876,20 +1893,20 @@ INSERT INTO `mylock`(`name`) VALUES('WangWu');
 INSERT INTO `mylock`(`name`) VALUES('ZhaoLiu');
 ```
 
-## 16.2.锁表的命令
+## 16.1.2.锁表的命令
 
-> 1、查看数据库表锁的命令。
+> 1、查看数据库表锁的命令
 
-```mysql
+```
 # 查看数据库表锁的命令
-SHOW OPEN TABLES;
+mysql> SHOW OPEN TABLES;
 ```
 
-> 2、给`mylock`表上读锁，给`book`表上写锁。
+> 2、给`mylock`表上读锁，给`book`表上写锁
 
-```mysql
+```
 # 给mylock表上读锁，给book表上写锁
-LOCK TABLE `mylock` READ, `book` WRITE;
+mysql> LOCK TABLE `mylock` READ, `book` WRITE;
 
 # 查看当前表的状态
 mysql> SHOW OPEN TABLES;
@@ -1901,11 +1918,11 @@ mysql> SHOW OPEN TABLES;
 +--------------------+------------------------------------------------------+--------+-------------+
 ```
 
-> 3、释放表锁。
+> 3、释放表锁
 
 ```mysql
 # 释放给表添加的锁
-UNLOCK TABLES;
+mysql> UNLOCK TABLES;
 
 # 查看当前表的状态
 mysql> SHOW OPEN TABLES;
@@ -1917,18 +1934,18 @@ mysql> SHOW OPEN TABLES;
 +--------------------+------------------------------------------------------+--------+-------------+
 ```
 
-## 16.3.读锁案例
+## 16.1.3.读锁案例
 
-> 1、打开两个会话，`SESSION1`为`mylock`表添加读锁。
+> 1、打开两个会话，`SESSION1`为`mylock`表添加读锁
 
-```mysql
+```
 # 为mylock表添加读锁
-LOCK TABLE `mylock` READ;
+mysql> LOCK TABLE `mylock` READ;
 ```
 
 > 2、打开两个会话，`SESSION1`是否可以读自己锁的表？是否可以修改自己锁的表？是否可以读其他的表？那么`SESSION2`呢？
 
-```shell
+```
 # SESSION1
 
 # 问题1：SESSION1为mylock表加了读锁，可以读mylock表！
@@ -1947,7 +1964,7 @@ mysql> SELECT * FROM `mylock`;
 mysql> UPDATE `mylock` SET `name` = 'abc' WHERE `id` = 1;
 ERROR 1099 (HY000): Table 'mylock' was locked with a READ lock and can't be updated
 
-# 问题3：SESSION1为mylock表加了读锁，不可以读其他的表！
+# 问题3：SESSION1为mylock表加了读锁，不可以读其他未锁定的表！
 mysql> SELECT * FROM `book`;
 ERROR 1100 (HY000): Table 'book' was not locked with LOCK TABLES
 
@@ -1971,7 +1988,7 @@ mysql> UPDATE `mylock` SET `name` = 'abc' WHERE `id` = 1;
 ^C^C -- query aborted
 ERROR 1317 (70100): Query execution was interrupted
 
-# 问题3：SESSION1为mylock表加了读锁，SESSION2可以读其他表！
+# 问题3：SESSION1为mylock表加了读锁，SESSION2可以读其他未锁定表！
 mysql> SELECT * FROM `book`;
 +--------+------+
 | bookid | card |
@@ -1988,10 +2005,9 @@ mysql> SELECT * FROM `book`;
 ```
 
 
+## 16.1.4.写锁案例
 
-## 16.4.写锁案例
-
-> 1、打开两个会话，`SESSION1`为`mylock`表添加写锁。
+> 1、打开两个会话，`SESSION1`为`mylock`表添加写锁
 
 ```mysql
 # 为mylock表添加写锁
@@ -2020,7 +2036,7 @@ mysql> UPDATE `mylock` SET `name` = 'abc' WHERE `id` = 1;
 Query OK, 1 row affected (0.00 sec)
 Rows matched: 1  Changed: 1  Warnings: 0
 
-# 问题3：SESSION1为mylock表加了写锁，不能读其他表!
+# 问题3：SESSION1为mylock表加了写锁，不能读其他未锁定的表!
 mysql> SELECT * FROM `book`;
 ERROR 1100 (HY000): Table 'book' was not locked with LOCK TABLES
 
@@ -2031,7 +2047,7 @@ mysql> SELECT * FROM `mylock`;
 ^C^C -- query aborted
 ERROR 1317 (70100): Query execution was interrupted
 
-# 问题2：SESSION1为mylock表加了写锁，SESSION2读mylock表会阻塞，等待SESSION1释放！
+# 问题2：SESSION1为mylock表加了写锁，SESSION2更新mylock表会阻塞，等待SESSION1释放！
 mysql> UPDATE `mylock` SET `name` = 'abc' WHERE `id` = 1;
 ^C^C -- query aborted
 ERROR 1317 (70100): Query execution was interrupted
@@ -2052,24 +2068,26 @@ mysql> SELECT * FROM `book`;
 24 rows in set (0.00 sec)
 ```
 
-## 16.5.案例结论
+## 16.1.5.案例结论
 
-**`MyISAM`引擎在执行查询语句`SELECT`之前，会自动给涉及到的所有表加读锁，在执行增删改之前，会自动给涉及的表加写锁。**
+**`MyISAM`引擎在执行查询语句`SELECT`之前，会自动给涉及到的所有表加读锁，在执行增删改之前，会自动给涉及的表加写锁**
 
 MySQL的表级锁有两种模式：
 
-- 表共享读锁（Table Read Lock）。
+- 表共享读锁（Table Read Lock）
 
-- 表独占写锁（Table Write Lock）。
+- 表独占写锁（Table Write Lock）
 
 対`MyISAM`表进行操作，会有以下情况：
 
-- 対`MyISAM`表的读操作（加读锁），不会阻塞其他线程対同一表的读操作，但是会阻塞其他线程対同一表的写操作。只有当读锁释放之后，才会执行其他线程的写操作。
-- 対`MyISAM`表的写操作（加写锁），会阻塞其他线程対同一表的读和写操作，只有当写锁释放之后，才会执行其他线程的读写操作。
+- 対`MyISAM`表的读操作（加读锁），不会阻塞其他线程対同一表的读操作，但是会阻塞其他线程対同一表的写操作，只有当读锁释放之后，才会执行其他线程的写操作
+- 対`MyISAM`表的写操作（加写锁），会阻塞其他线程対同一表的读和写操作，只有当写锁释放之后，才会执行其他线程的读写操作
 
-## 16.6.表锁分析
+简而言之就是：读锁会阻塞写，但不会阻塞读，而写锁会把读和写都阻塞
 
-```shell
+## 16.1.6.表锁分析
+
+```
 mysql> SHOW STATUS LIKE 'table%';
 +----------------------------+-------+
 | Variable_name              | Value |
@@ -2087,26 +2105,50 @@ mysql> SHOW STATUS LIKE 'table%';
 
 `Table_locks_immediate`：产生表级锁定的次数，表示可以立即获取锁的查询次数，每立即获取锁值加1。
 
-`Table_locks_waited`：出现表级锁定争用而发生等待的次数（不能立即获取锁的次数，每等待一次锁值加1），此值高则说明存在较严重的表级锁争用情况。
+`Table_locks_waited`：出现表级锁定争用而发生等待的次数（不能立即获取锁的次数，每等待一次锁值加1），此值越高，则说明存在较严重的表级锁争用竞争情况，实际工程中看此值就够了
 
-**此外，`MyISAM`的读写锁调度是写优先，这也是`MyISAM`不适合作为主表的引擎。因为写锁后，其他线程不能进行任何操作，大量的写操作会使查询很难得到锁，从而造成永远阻塞。**
+**此外，`MyISAM`的读写锁调度是写优先，这也是`MyISAM`不适合作为主表的引擎。因为写锁后，其他线程不能进行任何操作，大量的写操作会使查询很难得到锁，从而造成永远阻塞**
 
-# 17.行锁(偏写)
 
-**行锁特点：**
+# 16.2.行锁(偏写)
 
-- 偏向`InnoDB`存储引擎，开销大，加锁慢；会出现死锁；锁定粒度最小，发生锁冲突的概率最低，并发度最高。
+> 行锁特点
 
-**`InnoDB`存储引擎和`MyISAM`存储引擎最大不同有两点：一是支持事务，二是采用行锁。**
+- 偏向`InnoDB`存储引擎，开销大，加锁慢；会出现死锁；锁定粒度最小，发生锁冲突的概率最低，并发度最高
+- `InnoDB`存储引擎和`MyISAM`存储引擎最大不同有两点：**一是支持事务，二是采用行级锁**
 
-事务的ACID：
+> 事务(Transaction)及其ACI属性
 
-- `Atomicity [ˌætəˈmɪsəti] `。
-- `Consistency [kənˈsɪstənsi] `。
-- `Isolation [ˌaɪsəˈleɪʃn]`。
-- `Durability [ˌdjʊərəˈbɪlɪti] `。
+- `原子性(Atomicity)`：指事务包含的所有操作要么全部成功(Commit)，要么全部失败回滚(Rollback), 因此事务的操作如果成功就必须要完全应用到数据库，如果操作失败则不能对数据库有任何影响
+- `一致性(Consistency)`：一个事务执行之前和执行之后都必须处于一致性状态。事务结束时，所有的内部数据结构（如 B 树索引或双向链表）都必须是正确的
+- `隔离性(Isolation)`：指一个事务的执行不能被其他事务干扰，即一个事务内部的操作及使用的数据对并发的其他事务是隔离的，并发执行的各个事务之间不能互相干扰
+- `持久性（Durability)`： 指一个事务一旦被提交了，那么对数据库中的数据的改变就是永久性的，即便是在数据库系统遇到故障的情况下也不会丢失提交事务的操作
 
-## 17.1.环境准备
+> 并发事务处理会带来的问题
+
+- `更新丢失(Lost Update)`：两个事务同时更新一条数据，使得一个事务的更新数据被另一个事务的更新数据所覆盖
+- `脏读(Dirty Reads)`：一个事务读到了另一个未提交事务修改过的数据
+- `不可重复读(Non-Repeatable Reads)`: 一个事务只能读到另一个已经提交的事务修改过的数据，并且其他事务每对该数据进行一次修改并提交后，该事务都能查询到最新值   
+	脏读和不可重复读的区别：脏读是某一个事务读取了另一个事务未提交的脏数据，而不可重复读则是读取了前一事务提交的数据
+- `幻读(Phantom Reads)`:一个事务先根据某些条件查询出一些记录，之后另一个事务又向表中插入了符合这些条件的记录，原先的事务再次按照该条件查询时，能把另一个事务插入的记录也读出来
+
+> 四大事务隔离级别
+
+- 作用：定义事务处理数据读写操作的隔离程度，使事务之间互相隔离，互不影响，保证事务并发操作数据的正确性和一致性
+- 读未提交(Read Uncommitted): 在该事务隔离级别下，查询语句在无锁的情况下运行，事务B可以读取到事务A修改过但未提交的数据，所有事务都可以看到其他未提交事务的执行结果，可能发生脏读，不可重复度和幻读问题，一般很少使用
+- 读已提交(Read Committed): 在该事务隔离级别下，事务B只能在事务A修改过并且已提交后才能读取到事务A修改的数据，解决了脏读的问题，但可能发生不可重复读和幻读，一般很少使用
+- 可重复读(Repeatable Read): 在该事务隔离级别下，事务B只能在事务A修改过数据并提交后，自己也提交事务后，才能读取到事务A修改的数据。即一个事务内的两次无锁查询返回的数据都是一样的，但别的事务的新增数据也能读取到，解决了脏读和不可重复读的问题，但可能发生幻读
+- 可串行化(Serializable)：在该事务隔离级别下, 可串行化读会给每个查询数据行加上共享锁(读锁)，排他锁(写锁)，意味着所有的读操作之间不阻塞，但读操作会阻塞别的事务的写操作，写操作也阻塞别的事务的读操作和写操作，解决了脏读，不可重复读，幻读的问题，但可能导致大量的超时现象和锁竞争
+- 隔离级别和对性能影响的比较：可串行化>可重复读>读已提交>读未提交，事务隔离级别越高，所需要消耗的MySQL的性能越大(事务并发严重)，执行效率越低。为了平衡二者，一般建议设置的隔离级别为可重复读，MySQL默认的隔离级别为可重复读
+- 事务的隔离级别设置一定要在开始事务之前，隔离级别的设置只对当前会话有效。对于使用MySQL命令窗口而言，一个窗口就相当于一个会话，当前窗口设置的隔离级别只对当前窗口中的事务有效
+- 查看/设置当前会话的隔离级别：
+	`SHOW VARIABLES LIKE 'transaction_isolation';`
+	`SELECT @@[global.|session.] transaction_isolation;`
+	`SET [GLOBAL|SESSION] TRANSACTION ISOLATION LEVEL [REPEATABLE READ|READ UNCOMMITTED|READ COMMITTED|SERIALIZABLE];`
+
+
+
+## 16.2.1.环境准备
 
 ```mysql
 # 建表语句
@@ -2130,7 +2172,7 @@ CREATE INDEX idx_test_a ON `test_innodb_lock`(a);
 CREATE INDEX idx_test_b ON `test_innodb_lock`(b);
 ```
 
-## 17.2.行锁案例
+## 16.2.2.行锁案例
 
 > 1、开启手动提交
 
@@ -2217,7 +2259,7 @@ Query OK, 1 row affected (0.00 sec)
 Rows matched: 1  Changed: 1  Warnings: 0
 ```
 
-## 17.3.索引失效行锁变表锁
+## 16.2.3.索引失效行锁变表锁
 
 ```shell
 # SESSION1 执行SQL语句，没有执行commit。
@@ -2232,7 +2274,7 @@ mysql> UPDATE `test_innodb_lock` SET `b` = '1314' WHERE `a` = 1;
 ERROR 1205 (HY000): Lock wait timeout exceeded; try restarting transaction
 ```
 
-## 17.4.间隙锁的危害
+## 16.2.4.间隙锁的危害
 
 > 什么是间隙锁？
 
@@ -2246,13 +2288,13 @@ ERROR 1205 (HY000): Lock wait timeout exceeded; try restarting transaction
 
 间隙锁有一个比较致命的缺点，就是**当锁定一个范围的键值后，即使某些不存在的键值也会被无辜的锁定，而造成在锁定的时候无法插入锁定键值范围内的任何数据。**在某些场景下这可能会対性能造成很大的危害。
 
-## 17.5.如何锁定一行
+## 16.2.5.如何锁定一行
 
 ![锁定一行](https://img-blog.csdnimg.cn/2020080616050355.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L1JyaW5nb18=,size_16,color_FFFFFF,t_70)
 
 `SELECT .....FOR UPDATE`在锁定某一行后，其他写操作会被阻塞，直到锁定的行被`COMMIT`。
 
-## 17.6.案例结论
+## 16.2.6.案例结论
 
 `InnoDB`存储引擎由于实现了行级锁定，虽然在锁定机制的实现方面所带来的性能损耗可能比表级锁定会要更高一些，但是在整体并发处理能力方面要远远优于`MyISAM`的表级锁定的。当系统并发量较高的时候，`InnoDB`的整体性能和`MyISAM`相比就会有比较明显的优势了。
 
@@ -2284,9 +2326,9 @@ mysql> SHOW STATUS LIKE 'innodb_row_lock%';
 
 尤其是当等待次数很高，而且每次等待时长也不小的时候，我们就需要分析系统中为什么会有如此多的等待，然后根据分析结果着手制定优化策略。
 
-# 18.主从复制
+# 17.主从复制
 
-## 18.1.复制基本原理
+## 17.1.复制基本原理
 
 ![主从复制](https://img-blog.csdnimg.cn/20200806170415401.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L1JyaW5nb18=,size_16,color_FFFFFF,t_70)
 
@@ -2296,13 +2338,13 @@ MySQL复制过程分为三步：
 - Slave将Master的`Binary Log Events`拷贝到它的中继日志(Replay  Log);
 - Slave重做中继日志中的事件，将改变应用到自己的数据库中。MySQL复制是异步且串行化的。
 
-## 18.2.复制基本原则
+## 17.2.复制基本原则
 
 - 每个Slave只有一个Master。
 - 每个Slave只能有一个唯一的服务器ID。
 - 每个Master可以有多个Salve。
 
-## 18.3.一主一从配置
+## 17.3.一主一从配置
 
 > 1、基本要求：Master和Slave的MySQL服务器版本一致且后台以服务运行。
 
@@ -2546,6 +2588,3 @@ Master_SSL_Verify_Server_Cert: No
            Master_TLS_Version: 
 1 row in set (0.00 sec)
 ```
-
-
-
