@@ -1372,67 +1372,54 @@ EXPLAIN SELECT * FROM `talA` WHERE `birth` > '2020-08-04 07:42:21' ORDER BY `age
 EXPLAIN SELECT * FROM `talA` ORDER BY `age` ASC, `birth` DESC;
 ```
 
-`ORDER BY`子句，尽量使用索引排序，避免使用`Using filesort`排序。
+`ORDER BY`子句，尽量使用索引排序，避免使用`Using filesort`排序
 
-MySQL支持两种方式的排序，`FileSort`和`Index`，`Index`的效率高，它指MySQL扫描索引本身完成排序。`FileSort`方式效率较低。
+MySQL支持两种方式的排序，`FileSort`和`Index`，`Index`的效率高，它指MySQL扫描索引本身完成排序，`FileSort`方式效率较低
 
-`ORDER BY`满足两情况，会使用`Index`方式排序：
+`ORDER BY`满足以下两中情况，会使用`Index`方式排序：
 
-- `ORDER BY`语句使用索引最左前列。
-- 使用`WHERE`子句与`ORDER BY`子句条件列组合满足索引最左前列。
+- `ORDER BY`语句使用索引最左前列
+- 使用`WHERE`子句与`ORDER BY`子句条件列组合满足索引最左前列
 
-**结论：尽可能在索引列上完成排序操作，遵照索引建的最佳左前缀原则。**
+**结论：尽可能在索引列上完成排序操作，遵照索引建的最佳左前缀原则**
 
+> 如果不在索引列上，File Sort有两种算法，包括双路排序算法和单路排序算法：
 
+1、双路排序算法：MySQL4.1之前使用双路排序，字面意思就是两次扫描磁盘，最终得到数据，读取行指针和`ORDER BY`列，対他们进行排序，然后扫描已经排序好的列表，按照列表中的值重新从列表中读取对应的数据输出。**一句话，从磁盘取排序字段，在`buffer`中进行排序，再从磁盘取其他字段**
 
-> 如果不在索引列上，File Sort有两种算法：MySQL就要启动双路排序算法和单路排序算法
+取一批数据，要对磁盘进行两次扫描，众所周知，IO是很耗时的，所以在MySQL4.1之后，出现了改进的算法，就是单路排序算法
 
-1、双路排序算法：MySQL4.1之前使用双路排序，字面意思就是两次扫描磁盘，最终得到数据，读取行指针和`ORDER BY`列，対他们进行排序，然后扫描已经排序好的列表，按照列表中的值重新从列表中读取对应的数据输出。**一句话，从磁盘取排序字段，在`buffer`中进行排序，再从磁盘取其他字段。**
+2、单路排序算法：从磁盘读取查询需要的所有列，按照`ORDER BY`列在`buffer`対它们进行排序，然后将扫描排序后的列表进行输出，它的效率更快一些，避免了第二次读取数据，并且把随机IO变成了顺序IO，但是它会使用更多的空间，因为它把每一行都保存在内存中了
 
-取一批数据，要对磁盘进行两次扫描，众所周知，IO是很耗时的，所以在MySQL4.1之后，出现了改进的算法，就是单路排序算法。
-
-2、单路排序算法：从磁盘读取查询需要的所有列，按照`ORDER BY`列在`buffer`対它们进行排序，然后扫描排序后的列表进行输出，它的效率更快一些，避免了第二次读取数据。并且把随机IO变成了顺序IO，但是它会使用更多的空间，因为它把每一行都保存在内存中了。
-
-
-
-由于单路排序算法是后出的，总体而言效率好过双路排序算法。
-
-但是单路排序算法有问题：如果`SortBuffer`缓冲区太小，导致从磁盘中读取所有的列不能完全保存在`SortBuffer`缓冲区中，这时候单路复用算法就会出现问题，反而性能不如双路复用算法。
-
-
+由于单路排序算法是后出的，总体而言效率好过双路排序算法，但是单路排序算法有问题：如果`SortBuffer`缓冲区太小，导致从磁盘中读取所有的列不能完全保存在`SortBuffer`缓冲区中进行排序，此时会创建tmp文件并进行多路合并，排序完再取`SortBuffer`容量大小再排，这时候单路复用算法就会变成多路，反而性能不如双路复用算法，得不偿失
 
 **单路复用算法的优化策略：**
 
-- 增大`sort_buffer_size`参数的设置。
-- 增大`max_length_for_sort_data`参数的设置。
+- 增大`sort_buffer_size`参数的设置
+- 增大`max_length_for_sort_data`参数的设置
 
 **提高ORDER BY排序的速度：**
 
 - `ORDER BY`时使用`SELECT *`是大忌，查什么字段就写什么字段，这点非常重要。在这里的影响是：
-  - 当查询的字段大小总和小于`max_length_for_sort_data`而且排序字段不是`TEXT|BLOB`类型时，会使用单路排序算法，否则使用多路排序算法。
-  - 两种排序算法的数据都有可能超出`sort_buffer`缓冲区的容量，超出之后，会创建`tmp`临时文件进行合并排序，导致多次IO，但是单路排序算法的风险会更大一些，所以要增大`sort_buffer_size`参数的设置。
-
-- 尝试提高`sort_buffer_size`：不管使用哪种算法，提高这个参数都会提高效率，当然，要根据系统的能力去提高，因为这个参数是针对每个进程的。
-- 尝试提高`max_length_for_sort_data`：提高这个参数，会增加用单路排序算法的概率。但是如果设置的太高，数据总容量`sort_buffer_size`的概率就增大，明显症状是高的磁盘IO活动和低的处理器使用率。
+  - 当查询的字段大小总和小于`max_length_for_sort_data`而且排序字段不是`TEXT|BLOB`类型时，会使用单路排序算法，否则使用多路排序算法
+  - 两种排序算法的数据都有可能超出`sort_buffer`缓冲区的容量，超出之后，会创建`tmp`临时文件进行合并排序，导致多次IO，但是单路排序算法的风险会更大一些，所以要增大`sort_buffer_size`参数的设置
+- 尝试提高`sort_buffer_size`：不管使用哪种算法，提高这个参数都会提高效率，当然，要根据系统的能力去提高，因为这个参数是针对每个进程的
+- 尝试提高`max_length_for_sort_data`：提高这个参数，会增加用单路排序算法的概率。但是如果设置的太高，数据总容量`sort_buffer_size`的概率就增大，明显症状是高的磁盘IO活动和低的处理器使用率
 
 ## 12.3.GORUP BY优化
 
-- `GROUP BY`实质是先排序后进行分组，遵照索引建的最佳左前缀。
-
-- 当无法使用索引列时，会使用`Using filesort`进行排序，增大`max_length_for_sort_data`参数的设置和增大`sort_buffer_size`参数的设置，会提高性能。
-
-- `WHERE`执行顺序高于`HAVING`，能写在`WHERE`限定条件里的就不要写在`HAVING`中了。
-
-
+- `GROUP BY`实质是先排序后进行分组，遵照索引建的最佳左前缀
+- 当无法使用索引列时，会使用`Using filesort`进行排序，增大`max_length_for_sort_data`参数的设置和增大`sort_buffer_size`参数的设置，会提高性能
+- `WHERE`执行顺序高于`HAVING`，能写在`WHERE`限定条件里的就不要写在`HAVING`中了
 
 ## 12.4.总结
 
 **为排序使用索引**
 
-- MySQL两种排序方式：`Using filesort`和`Index`扫描有序索引排序。
-- MySQL能为排序与查询使用相同的索引，创建的索引既可以用于排序也可以用于查询。
+- MySQL两种排序方式：`Using filesort`文件内排序和`Index`扫描有序索引排序
+- MySQL能为排序与查询使用相同的索引，创建的索引既可以用于排序，也可以用于查询
 
-```sql
+```
 /* 创建a b c三个字段的索引 */
 idx_table_a_b_c(a, b, c)
 
@@ -1461,23 +1448,23 @@ WHERE a IN (...) ORDER BY b, c;  /* 对于排序来说，多个相等条件(a=1 
 
 > 慢查询日志是什么？
 
-- MySQL的慢查询日志是MySQL提供的一种日志记录，它用来记录在MySQL中响应时间超过阈值的语句，具体指运行时间超过`long_query_time`值的SQL，则会被记录到慢查询日志中。
-- `long_query_time`的默认值为10，意思是运行10秒以上的语句。
-- 由慢查询日志来查看哪些SQL超出了我们的最大忍耐时间值，比如一条SQL执行超过5秒钟，我们就算慢SQL，希望能收集超过5秒钟的SQL，结合之前`explain`进行全面分析。
+- MySQL的慢查询日志是MySQL提供的一种日志记录，它用来记录在MySQL中响应时间超过阈值的语句，具体指运行时间超过`long_query_time`值的SQL，则会被记录到慢查询日志中，`long_query_time`的默认值为10，意思是运行10秒以上的语句
+- 由慢查询日志来查看哪些SQL超出了我们的最大忍耐时间值，比如一条SQL执行超过5秒钟，我们就认为是慢SQL，希望能收集超过5秒钟的SQL，结合之前`explain`进行全面分析
 
 > 特别说明
 
-**默认情况下，MySQL数据库没有开启慢查询日志，**需要我们手动来设置这个参数。
+**默认情况下，MySQL数据库没有开启慢查询日志**，需要我们手动来设置这个参数。
 
-**当然，如果不是调优需要的话，一般不建议启动该参数**，因为开启慢查询日志会或多或少带来一定的性能影响。慢查询日志支持将日志记录写入文件。
+**当然，如果不是调优需要的话，一般不建议启动该参数**，因为开启慢查询日志会或多或少带来一定的性能影响，慢查询日志支持将日志记录写入文件
+
 
 > 查看慢查询日志是否开以及如何开启
 
-- 查看慢查询日志是否开启：`SHOW VARIABLES LIKE '%slow_query_log%';`。
+- 查看慢查询日志是否开启：`SHOW VARIABLES LIKE '%slow_query_log%';`
 
-- 开启慢查询日志：`SET GLOBAL slow_query_log = 1;`。**使用该方法开启MySQL的慢查询日志只对当前数据库生效，如果MySQL重启后会失效。**
+- 开启慢查询日志：`SET GLOBAL slow_query_log = 1;`，**使用该方法开启MySQL的慢查询日志只对当前数据库生效，如果MySQL重启后会失效**
 
-```shell
+```
 # 1、查看慢查询日志是否开启
 mysql> SHOW VARIABLES LIKE '%slow_query_log%';
 +---------------------+--------------------------------------+
@@ -1493,31 +1480,24 @@ mysql> SET GLOBAL slow_query_log = 1;
 Query OK, 0 rows affected (0.00 sec)
 ```
 
+- 如果要使慢查询日志永久开启，需要修改`my.cnf`配置文件(其他系统变量也是如此)，在`[mysqld]`下增加或修改参数后，重启MySQL服务器：
 
-
-如果要使慢查询日志永久开启，需要修改`my.cnf`文件，在`[mysqld]`下增加修改参数。
-
-```shell
+```
 # my.cnf
 [mysqld]
-# 1.这个是开启慢查询。注意ON需要大写
+# 1.这个是开启慢查询，注意ON需要大写
 slow_query_log=ON  
 
-# 2.这个是存储慢查询的日志文件。这个文件不存在的话，需要自己创建
+# 2.这个是存储慢查询的日志文件，这个文件不存在的话，需要自己创建
 slow_query_log_file=/var/lib/mysql/slow.log
 ```
 
-
-
 > 开启了慢查询日志后，什么样的SQL才会被记录到慢查询日志里面呢？
 
-这个是由参数`long_query_time`控制的，默认情况下`long_query_time`的值为10秒。
+这个是由参数`long_query_time`控制的，默认情况下`long_query_time`的值为10秒，只有SQL的执行时间>10才会被记录，MySQL中查看`long_query_time`的时间如下：
 
-MySQL中查看`long_query_time`的时间：`SHOW VARIABLES LIKE 'long_query_time%';`。
-
-```shell
-# 查看long_query_time 默认是10秒
-# 只有SQL的执行时间>10才会被记录
+```
+# 查看long_query_time
 mysql> SHOW VARIABLES LIKE 'long_query_time%';
 +-----------------+-----------+
 | Variable_name   | Value     |
@@ -1525,23 +1505,29 @@ mysql> SHOW VARIABLES LIKE 'long_query_time%';
 | long_query_time | 10.000000 |
 +-----------------+-----------+
 1 row in set (0.00 sec)
-```
 
+# 修改long_query_time
+`mysql> SET GLOBAL long_query_time=1;`
 
+设置后为什么看不出变化？ 解决方法：
+	需要重新连接或新开一个会话才能看到修改值，并再次使用`SHOW VARIABLES LIKE 'long_query_time%';`
+	也可以使用`SHOW GLOBAL VARIABLES LIKE 'long_query_time%';`
 
-修改`long_query_time`的时间，需要在`my.cnf`修改配置文件
-
-```shell
+# 如需永久修改`long_query_time`的时间，需要修改`my.cnf`配置文件
+# my.cnf
 [mysqld]
 # 这个是设置慢查询的时间，我设置的为1秒
 long_query_time=1
 ```
 
+> 如何测试
 
 
-查新慢查询日志的总记录条数：`SHOW GLOBAL STATUS LIKE '%Slow_queries%';`。
 
-```shell
+
+> 查询慢查询日志的总记录条数
+
+```
 mysql> SHOW GLOBAL STATUS LIKE '%Slow_queries%';
 +---------------+-------+
 | Variable_name | Value |
@@ -1630,8 +1616,6 @@ CREATE TABLE `emp` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='员工表'
 ```
-
-
 
 > 2、由于开启过慢查询日志，开启了`bin-log`，我们就必须为`function`指定一个参数，否则使用函数会报错。
 
