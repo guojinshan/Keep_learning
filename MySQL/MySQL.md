@@ -2124,6 +2124,20 @@ mysql> SHOW STATUS LIKE 'table%';
 - `隔离性(Isolation)`：指一个事务的执行不能被其他事务干扰，即一个事务内部的操作及使用的数据对并发的其他事务是隔离的，并发执行的各个事务之间不能互相干扰
 - `持久性（Durability)`： 指一个事务一旦被提交了，那么对数据库中的数据的改变就是永久性的，即便是在数据库系统遇到故障的情况下也不会丢失提交事务的操作
 
+> 事务的实现原理
+
+- 事务日志(Transaction Log)
+	+ 目的：为了实现确保事务能在执行的任意过程中回滚（原子性）并且提交的事务会永久保存在数据库中(持久性)，我们使用事务日志来存储事务执行过程中的数据库的变动，每一条事务日志中都包含事务的 ID、当前被修改的元素、变动前以及变动后的值
+	+ 分类：一种是回滚日志（Undo Log），另一种是重做日志（Redo Log），其中前者保证事务的原子性，后者保证事务的持久性
+	+ 补充：当一个事务尝试对数据库进行修改时，会先生成一条日志并刷新到磁盘上，写日志的操作由于是追加的所以非常快，在这之后才会向数据库中写入或者更新对应的记录
+
+- 并发控制(Concurrency Control)
+	+ 目的：为了避免并发带来的一致性问题、满足数据库对于隔离性要求，数据系统往往都会使用并发控制尽可能充分利用机器地效率，实现一致性、隔离性与性能之间的权衡
+	+ 常见的并发控制机制包括：锁、时间戳、MVCC
+	+ 锁：使用在更新资源之前，以对资源进行锁定的方式保证多个数据库的会话同时修改某一行记录时不会出现脱离预期的行为
+	+ 时间戳：在每次提交时对资源是否被改变进行检查
+
+
 > 并发事务处理会带来的问题
 
 - `更新丢失(Lost Update)`：两个事务同时更新一条数据，使得一个事务的更新数据被另一个事务的更新数据所覆盖
@@ -2153,6 +2167,24 @@ mysql> SHOW STATUS LIKE 'table%';
 	+ `SHOW VARIABLES LIKE 'transaction_isolation';`   
 	+ `SELECT @@[global.|session.]transaction_isolation;`   
 	+ `SET [GLOBAL|SESSION] TRANSACTION ISOLATION LEVEL [REPEATABLE READ|READ UNCOMMITTED|READ COMMITTED|SERIALIZABLE];`
+- 隔离级别的实现原理：每条数据在更新的时候都会同时记录一条在回滚操作日志(Undo log)中记录一条回滚操作，通过回滚(Rollback)可以回到前一个状态的值
+
+> 相关问题
+- 为什么上了写锁，别的事务还可以进行读操作？因为InnoDB有MVCC(多版本并发控制),可以使用快照读，而不会被阻塞
+
+- 回滚操作日志什么时候删除？MYSQL会判断当没有事务需要用到这些回滚日志的时候，即当系统中有比这个回滚日志更早的read-view的时候，回滚日志就会被删除
+
+- MySQL的事务隔离级别和Spring中的事务隔离级别有什么必然的联系呢？ Spring就是对数据库事务进行了封装，并提出了5种事务隔离级别(ISOLATION_DEFAULT/ISOLATION_READ_UNCOMMITTED/ISOLATION_READ_COMMITTED/ISOLATION_REPEATABLE_READ/ISOLATION_SERIALIZABLE)和7种事务传播机制，规定了事务方法和事务方法发生嵌套调用时，事务该如何进行传播
+
+>7种事务传播机制
+
+- `PROPAGATION_REQUIRED`：如果当前事务方法有事务则加入事务，没有则创建一个事务
+- `PROPAGATION_SUPPORTS`: 支持当前事务，如果当前没事务，也支持非事务状态运行
+- `PROPAGATION_NOT_SUPPORTED`:不支持事务，以非事务方式执行操作。如果当前有事务，则挂起事务运行
+- `PROPAGATION_MANDATORY`: 强制当前事务方法使用事务运行，如果当前没有事务则抛出异常
+- `PROPAGATION_REQUIRES_NEW`:创建新事务，无论当前存不存在事务，都创建新事务
+- `PROPAGATION_NEVER`: 以非事务状态运行，当前事务方法不能存在事务，如果存在事务则抛出异常
+- `PROPAGATION_NESTED`：如果当前存在事务，则在嵌套事务内执行。嵌套事务的提交-回滚与父事务没有任何关系，反之，当父事务提交，嵌套事务也一起提交，父事务回滚，嵌套事务也会回滚。如果当前没有事务，则新建一个事务运行，即执行PROPAGATION_REQUIRED类似操作
 
 
 ## 16.2.1.环境准备
@@ -2166,7 +2198,6 @@ CREATE TABLE `test_innodb_lock`(
 
 # 插入数据
 INSERT INTO `test_innodb_lock`(`a`, `b`) VALUES(1, 'b2');
-INSERT INTO `test_innodb_lock`(`a`, `b`) VALUES(2, '3');
 INSERT INTO `test_innodb_lock`(`a`, `b`) VALUES(3, '4000');
 INSERT INTO `test_innodb_lock`(`a`, `b`) VALUES(4, '5000');
 INSERT INTO `test_innodb_lock`(`a`, `b`) VALUES(5, '6000');
@@ -2183,21 +2214,21 @@ CREATE INDEX idx_test_b ON `test_innodb_lock`(b);
 
 > 1、开启手动提交
 
-打开`SESSION1`和`SESSION2`两个会话，都开启手动提交。
+打开`SESSION1`和`SESSION2`两个会话，都开启手动提交
 
-```shell
+```
 # 开启MySQL数据库的手动提交
 mysql> SET autocommit=0;
 Query OK, 0 rows affected (0.00 sec)
 ```
 
-> 2、读几知所写
+> 2、读己之所写
 
-```shell
+```
 # SESSION1 
 
-# SESSION1対test_innodb_lock表做写操作，但是没有commit。
-# 执行修改SQL之后，查询一下test_innodb_lock表，发现数据被修改了。
+# SESSION1対test_innodb_lock表做写操作，但是没有commit
+# 执行修改SQL之后，查询一下test_innodb_lock表，发现数据被修改了
 mysql> UPDATE `test_innodb_lock` SET `b` = '88' WHERE `a` = 1;
 Query OK, 1 row affected (0.00 sec)
 Rows matched: 1  Changed: 1  Warnings: 0
@@ -2207,7 +2238,6 @@ mysql> SELECT * FROM `test_innodb_lock`;
 | a    | b    |
 +------+------+
 |    1 | 88   |
-|    2 | 3    |
 |    3 | 4000 |
 |    4 | 5000 |
 |    5 | 6000 |
@@ -2219,14 +2249,13 @@ mysql> SELECT * FROM `test_innodb_lock`;
 
 # SESSION2 
 
-# SESSION2这时候来查询test_innodb_lock表。
-# 发现SESSION2是读不到SESSION1未提交的数据的。
+# SESSION2这时候来查询test_innodb_lock表
+# 发现SESSION2是读不到SESSION1未提交的数据的，MySQL默认事务隔离级别的可重复读，不允许脏读
 mysql> SELECT * FROM `test_innodb_lock`;
 +------+------+
 | a    | b    |
 +------+------+
 |    1 | b2   |
-|    2 | 3    |
 |    3 | 4000 |
 |    4 | 5000 |
 |    5 | 6000 |
@@ -2234,12 +2263,12 @@ mysql> SELECT * FROM `test_innodb_lock`;
 |    7 | 8000 |
 |    8 | 9000 |
 +------+------+
-8 rows in set (0.00 se
+8 rows in set  (0.00 sec)
 ```
 
 > 3、行锁两个SESSION同时対一条记录进行写操作
 
-```shell
+```
 # SESSION1 対test_innodb_lock表的`a`=1这一行进行写操作，但是没有commit
 mysql> UPDATE `test_innodb_lock` SET `b` = '99' WHERE `a` = 1;
 Query OK, 1 row affected (0.00 sec)
@@ -2251,9 +2280,11 @@ mysql> UPDATE `test_innodb_lock` SET `b` = 'asdasd' WHERE `a` = 1;
 ERROR 1205 (HY000): Lock wait timeout exceeded; try restarting transaction
 ```
 
+只有等对方提交并且自己也提交后才可以看到最新数据，允许重复可读
+
 > 4、行锁两个SESSION同时对不同记录进行写操作
 
-```shell
+```
 # SESSION1 対test_innodb_lock表的`a`=6这一行进行写操作，但是没有commit
 mysql> UPDATE `test_innodb_lock` SET `b` = '8976' WHERE `a` = 6;
 Query OK, 1 row affected (0.00 sec)
@@ -2266,17 +2297,17 @@ Query OK, 1 row affected (0.00 sec)
 Rows matched: 1  Changed: 1  Warnings: 0
 ```
 
-## 16.2.3.索引失效行锁变表锁
+## 16.2.3.字符串未加单引号，导致索引失效，行锁变表锁
 
-```shell
-# SESSION1 执行SQL语句，没有执行commit。
+```
+# SESSION1 执行SQL语句，没有执行commit
 # 由于`b`字段是字符串，但是没有加单引号导致索引失效
 mysql> UPDATE `test_innodb_lock` SET `a` = 888 WHERE `b` = 8000;
 Query OK, 1 row affected, 1 warning (0.00 sec)
 Rows matched: 1  Changed: 1  Warnings: 1
 
 # SESSION2 和SESSION1操作的并不是同一行，但是也被阻塞了？？？
-# 由于SESSION1执行的SQL索引失效，导致行锁升级为表锁。
+# 由于SESSION1执行的SQL索引失效，导致行锁升级为表锁
 mysql> UPDATE `test_innodb_lock` SET `b` = '1314' WHERE `a` = 1;
 ERROR 1205 (HY000): Lock wait timeout exceeded; try restarting transaction
 ```
@@ -2285,53 +2316,77 @@ ERROR 1205 (HY000): Lock wait timeout exceeded; try restarting transaction
 
 > 什么是间隙锁？
 
-当我们用范围条件而不是相等条件检索数据，并请求共享或者排他锁时，`InnoDB`会给符合条件的已有数据记录的索引项加锁，对于键值在条件范文内但并不存在的记录，叫做"间隙(GAP)"。
-
-`InnoDB`也会对这个"间隙"加锁，这种锁的机制就是所谓的"间隙锁"。
+当我们用范围条件而不是相等条件检索数据，并请求共享或者排他锁时，`InnoDB`会给符合条件的已有数据记录的索引项加锁，对于键值在条件范围内但并不存在的记录，叫做"间隙(GAP)"。`InnoDB`也会对这个"间隙"加锁，这种锁的机制就是所谓的"间隙锁(Next-key锁)"
 
 > 间隙锁的危害
 
-因为`Query`执行过程中通过范围查找的话，他会锁定整个范围内所有的索引键值，即使这个键值不存在。
+因为`Query`执行过程中通过范围查找的话，他会锁定整个范围内所有的索引键值，即使这个键值不存在。间隙锁有一个比较致命的缺点，就是**当锁定一个范围的键值后，即使某些不存在的键值也会被无辜的锁定，而造成在锁定的时候无法插入锁定键值范围内的任何数据**，在某些场景下这可能会対性能造成很大的危害
 
-间隙锁有一个比较致命的缺点，就是**当锁定一个范围的键值后，即使某些不存在的键值也会被无辜的锁定，而造成在锁定的时候无法插入锁定键值范围内的任何数据。**在某些场景下这可能会対性能造成很大的危害。
+```
+如：原始数据中a列的值不连续，缺失`a` = 2的记录
 
-## 16.2.5.如何锁定一行
+# SESSION1 対test_innodb_lock表进行更新操作，但是没有commit
+mysql> UPDATE `test_innodb_lock` SET `b` = '0629' WHERE `a` > 1 and `a` < 6;
+Query OK, 3 row affected (0.00 sec)
+Rows matched: 3  Changed: 3  Warnings: 0
+
+# SESSION2 対test_innodb_lock表新增一条`a` = 2的记录，发生了阻塞，SESSION1提交后阻塞被解除
+# SESSION1和SESSION2同时对不同的行进行写操作互不影响
+mysql> INSERT INTO `test_innodb_lock`(`a`, `b`) VALUES(2, '3');
+Query OK, 1 row affected (0.00 sec)
+Rows matched: 1  Changed: 1  Warnings: 0
+```
+
+
+## 16.2.5.如何锁定一行（面试题）
 
 ![锁定一行](https://img-blog.csdnimg.cn/2020080616050355.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L1JyaW5nb18=,size_16,color_FFFFFF,t_70)
 
-`SELECT .....FOR UPDATE`在锁定某一行后，其他写操作会被阻塞，直到锁定的行被`COMMIT`。
+`SELECT ..... FOR UPDATE`在锁定某一行后，其他写操作会被阻塞，直到锁定行的会话执行`COMMIT`
+
 
 ## 16.2.6.案例结论
 
-`InnoDB`存储引擎由于实现了行级锁定，虽然在锁定机制的实现方面所带来的性能损耗可能比表级锁定会要更高一些，但是在整体并发处理能力方面要远远优于`MyISAM`的表级锁定的。当系统并发量较高的时候，`InnoDB`的整体性能和`MyISAM`相比就会有比较明显的优势了。
+`InnoDB`存储引擎由于实现了行级锁定，虽然在锁定机制的实现方面所带来的性能损耗可能比表级锁定会要更高一些，但是在整体并发处理能力方面要远远优于`MyISAM`的表级锁定的。当系统并发量较高的时候，`InnoDB`的整体性能和`MyISAM`相比就会有比较明显的优势了。但是，`InnoDB`的行级锁定同样也有其脆弱的一面，当我们使用不当的时候(如行锁变表锁)，可能会让`InnoDB`的整体性能表现不仅不能比`MyISAM`高，甚至可能会更差
 
-但是，`InnoDB`的行级锁定同样也有其脆弱的一面，当我们使用不当的时候，可能会让`InnoDB`的整体性能表现不仅不能比`MyISAM`高，甚至可能会更差。
 
-## 17.7.行锁分析
+## 16.2.7.行锁分析
 
-```shell
+```
 mysql> SHOW STATUS LIKE 'innodb_row_lock%';
-+-------------------------------+--------+
-| Variable_name                 | Value  |
-+-------------------------------+--------+
-| Innodb_row_lock_current_waits | 0      |
-| Innodb_row_lock_time          | 124150 |
-| Innodb_row_lock_time_avg      | 31037  |
-| Innodb_row_lock_time_max      | 51004  |
-| Innodb_row_lock_waits         | 4      |
-+-------------------------------+--------+
++-------------------------------+-------+
+| Variable_name                 | Value |
++-------------------------------+-------+
+| Innodb_row_lock_current_waits | 0     |
+| Innodb_row_lock_time          | 43497 |
+| Innodb_row_lock_time_avg      | 21748 |
+| Innodb_row_lock_time_max      | 32599 |
+| Innodb_row_lock_waits         | 2     |
++-------------------------------+-------+
 5 rows in set (0.00 sec)
 ```
 
 対各个状态量的说明如下：
 
-- `Innodb_row_lock_current_waits`：当前正在等待锁定的数量。
-- `Innodb_row_lock_time`：从系统启动到现在锁定总时间长度（重要）。
-- `Innodb_row_lock_time_avg`：每次等待所花的平均时间（重要）。
-- `Innodb_row_lock_time_max`：从系统启动到现在等待最长的一次所花的时间。
-- `Innodb_row_lock_waits`：系统启动后到现在总共等待的次数（重要）。
+- `Innodb_row_lock_current_waits`：当前正在等待锁定的数量
+- `Innodb_row_lock_time`：从系统启动到现在锁定总时间长度**（重要）**
+- `Innodb_row_lock_time_avg`：每次等待所花的平均时间**（重要）**
+- `Innodb_row_lock_time_max`：从系统启动到现在等待最长的一次所花的时间
+- `Innodb_row_lock_waits`：系统启动后到现在总共等待的次数**（重要）**
 
-尤其是当等待次数很高，而且每次等待时长也不小的时候，我们就需要分析系统中为什么会有如此多的等待，然后根据分析结果着手制定优化策略。
+尤其是当等待次数`Innodb_row_lock_waits`很高，而且每次等待平均时长`Innodb_row_lock_time_avg`也不小的时候，我们就需要通过`Show Profiles`分析系统中为什么会有如此多的等待，然后根据分析结果着手制定优化策略
+
+## 16.2.8.优化建议
+
+- 尽可能让所有数据检索都通过索引来完成，避免无索引行锁升级为表锁(Varchar类型不加单引号是重罪！)
+- 合理设计索引，尽量缩小锁的范围(避免间隙锁的危害)
+- 尽量控制事务大小，减少锁定资源量和时间长度
+- 尽可能低级别事务隔离
+
+## 16.3.页锁
+
+开销和加锁时间介于表锁和行锁之间；会出现死锁；锁定粒度介于表锁和行锁之间，并发性一般(使用较少，了解即可)
+
 
 # 17.主从复制
 
@@ -2341,22 +2396,27 @@ mysql> SHOW STATUS LIKE 'innodb_row_lock%';
 
 MySQL复制过程分为三步：
 
-- Master将改变记录到二进制日志(Binary Log)。这些记录过程叫做二进制日志事件，`Binary Log Events`；
-- Slave将Master的`Binary Log Events`拷贝到它的中继日志(Replay  Log);
-- Slave重做中继日志中的事件，将改变应用到自己的数据库中。MySQL复制是异步且串行化的。
+- Master将改变记录到二进制日志中(Binary Log)，这些记录过程叫做二进制日志事件(`Binary Log Events`)
+- Slave将Master的`Binary Log Events`拷贝到它的中继日志(Replay  Log)中
+- Slave重做中继日志中的事件，将改变应用到自己的数据库中，MySQL复制是异步且串行化的
 
 ## 17.2.复制基本原则
 
-- 每个Slave只有一个Master。
-- 每个Slave只能有一个唯一的服务器ID。
-- 每个Master可以有多个Salve。
+- 每个Slave只有一个Master
+- 每个Slave只能有一个唯一的服务器ID
+- 每个Master可以有多个Slave
 
-## 17.3.一主一从配置
+## 17.3.一主一从常见配置
 
-> 1、基本要求：Master和Slave的MySQL服务器版本一致且后台以服务运行。
+> 1、基本要求：主机Master和从机Slave的MySQL服务器版本一致且后台以服务运行
 
-```shell
-# 创建mysql-slave1实例
+说明：此处主机在Windows上，从机在Linux上
+
+```
+# 检查主从机网络是否互通
+linux> ping ip地址
+
+# 创建mysql-slave1实例(使用docker)
 docker run -p 3307:3306 --name mysql-slave1 \
 -v /root/mysql-slave1/log:/var/log/mysql \
 -v /root/mysql-slave1/data:/var/lib/mysql \
@@ -2367,35 +2427,59 @@ docker run -p 3307:3306 --name mysql-slave1 \
 
 > 2、主从配置都是配在[mysqld]节点下，都是小写
 
-```shell
-# Master配置
+```
+# 主机修改my.ini配置文件(windows版)
 [mysqld]
-server-id=1 # 必须
-log-bin=/var/lib/mysql/mysql-bin # 必须
-read-only=0
-binlog-ignore-db=mysql
+# 必须设置项
+server-id=1  # 主服务器唯一ID
+log-bin=自己本地路径/mysqlbin # 启用二进制日志 
+
+#可选项
+log-err=自己本地路劲/mysqlerr # 启用错误日志
+basedir = '自己本地路径' # 根目录
+tmpdir = '自己本地路径' # 临时目录
+datadir = 自己本地路径/Data/ # 数据目录
+read-only=0 # 主机，读写都可以
+binlog-ignore-db=mysql # 设置不要复制的数据库
+binlog-do-db=需要复制的主数据库名字 # 设置需要复制的数据库
+
+# 从机修改my.cnf配置文件(Linux版)
+linux> vim /etc/my.cnf
+[mysqld]
+# 必须设置项
+server-id=2 # 从服务器唯一ID
+# 可选项
+log-bin=/var/lib/mysql/mysql-bin # 启用二进制日志
+
+# 重启数据库
+linux> service mysql stop
+linux> service mysql start
+linux> ps -ef | grep mysql
+
+# 主从机都关闭防火墙
+windows手动关闭
+linux> service iptables stop
 ```
 
-```shell
-# Slave配置
-[mysqld]
-server-id=2 # 必须
-log-bin=/var/lib/mysql/mysql-bin
+> 3、Master主机配置
+
+在Windows主机上建立账户并授权从机
+
 ```
+# Windows上启用MySQL
+直接切换到MySQL安装的bin目录下，执行mysql -u root -p
 
-> 3、Master配置
-
-```shell
-# 1、GRANT REPLICATION SLAVE ON *.* TO 'username'@'从机IP地址' IDENTIFIED BY 'password';
+# Windows上授权：GRANT REPLICATION SLAVE ON *.* TO 'username'@'从机数据库IP地址' IDENTIFIED BY 'password';
 mysql> GRANT REPLICATION SLAVE ON *.* TO 'zhangsan'@'172.18.0.3' IDENTIFIED BY '123456';
 Query OK, 0 rows affected, 1 warning (0.01 sec)
 
-# 2、刷新命令
+# 刷新命令
 mysql> FLUSH PRIVILEGES;
 Query OK, 0 rows affected (0.00 sec)
 
-# 3、记录下File和Position
-# 每次配从机的时候都要SHOW MASTER STATUS;查看最新的File和Position
+# 记录下File和Position
+# 每次配从机的时候都要SHOW MASTER STATUS; 
+# 查看最新的File和Position
 mysql> SHOW MASTER STATUS;
 +------------------+----------+--------------+------------------+-------------------+
 | File             | Position | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set |
@@ -2407,18 +2491,10 @@ mysql> SHOW MASTER STATUS;
 
 > 4、Slave从机配置
 
-```shell
-CHANGE MASTER TO MASTER_HOST='172.18.0.4',
-MASTER_USER='zhangsan',
-MASTER_PASSWORD='123456',
-MASTER_LOG_FILE='mysql-bin.File的编号',
-MASTER_LOG_POS=Position的最新值;
 ```
+# Linux上配置：CHANGE MASTER TO MASTER_HOST='主机IP地址', MASTER_USER='username', MASTER_PASSWORD='password', MASTER_LOG_FILE='mysql-bin.File的编号', MASTER_LOG_POS=Position的最新值;
 
-
-
-```shell
-# 1、使用用户名密码登录进Master
+# 使用用户名密码登录进Master
 mysql> CHANGE MASTER TO MASTER_HOST='172.18.0.4',
     -> MASTER_USER='zhangsan',
     -> MASTER_PASSWORD='123456',
@@ -2426,11 +2502,11 @@ mysql> CHANGE MASTER TO MASTER_HOST='172.18.0.4',
     -> MASTER_LOG_POS=602;
 Query OK, 0 rows affected, 2 warnings (0.02 sec)
 
-# 2、开启Slave从机的复制
+# 开启Slave从机的复制
 mysql> START SLAVE;
 Query OK, 0 rows affected (0.00 sec)
 
-# 3、查看Slave状态
+# 查看Slave状态
 # Slave_IO_Running 和 Slave_SQL_Running 必须同时为Yes 说明主从复制配置成功！
 mysql> SHOW SLAVE STATUS\G
 *************************** 1. row ***************************
@@ -2444,8 +2520,8 @@ mysql> SHOW SLAVE STATUS\G
                Relay_Log_File: b030ad25d5fe-relay-bin.000002
                 Relay_Log_Pos: 320
         Relay_Master_Log_File: mysql-bin.000001
-             Slave_IO_Running: Yes  
-            Slave_SQL_Running: Yes
+             Slave_IO_Running: Yes  [必须为Yes]
+            Slave_SQL_Running: Yes [必须为Yes]
               Replicate_Do_DB: 
           Replicate_Ignore_DB: 
            Replicate_Do_Table: 
@@ -2496,12 +2572,24 @@ Master_SSL_Verify_Server_Cert: No
 
 > 5、测试主从复制
 
-```shell
-# Master创建数据库
-mysql> create database test_replication;
+```
+# Master主机创建数据库(Windows)
+mysql> CREATE DATABASE test_replication;
 Query OK, 1 row affected (0.01 sec)
 
-# Slave查询数据库
+# 使用数据库
+mysql> USE test_replication;
+Database changed
+
+# 新建表
+mysql> CREATE TABLE dog (id INT NOT NULL, name VARCHAR(20));
+Query OK, 0 row affected (0.01 sec)
+
+# 插入记录
+mysql> INSERT INTO dog VALUES(1, 'ww1');
+Query OK, 1 row affected (0.01 sec)
+
+# Slave从机查询数据库 (Linux)
 mysql> show databases;
 +--------------------+
 | Database           |
@@ -2513,17 +2601,35 @@ mysql> show databases;
 | test_replication   |
 +--------------------+
 5 rows in set (0.00 sec)
+
+# 使用数据库
+mysql> USE test_replication;
+Database changed
+
+mysql> SELECT * FROM dog;
++------+----------+
+|  id  |   name   |
++------+----------+
+|  1   |   ww1    |
++------+----------+
 ```
 
 > 6、停止主从复制功能
 
-```shell
-# 1、停止Slave
+```
+# 停止从机复制功能，运行在重新配置主从之前(必须)
 mysql> STOP SLAVE;
 Query OK, 0 rows affected (0.00 sec)
 
-# 2、重新配置主从
-# MASTER_LOG_FILE 和 MASTER_LOG_POS一定要根据最新的数据来配
+# 重新配置主从，每次都要使用SHOW MASTER STATUS;，找到最新的MASTER_LOG_FILE 和 MASTER_LOG_POS来更新配置
+mysql> SHOW MASTER STATUS;
++------------------+----------+--------------+------------------+-------------------+
+| File             | Position | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set |
++------------------+----------+--------------+------------------+-------------------+
+| mysql-bin.000001 |      797 |              | mysql            |                   |
++------------------+----------+--------------+------------------+-------------------+
+1 row in set (0.00 sec)
+
 mysql> CHANGE MASTER TO MASTER_HOST='172.18.0.4',
     -> MASTER_USER='zhangsan',
     -> MASTER_PASSWORD='123456',
@@ -2531,9 +2637,12 @@ mysql> CHANGE MASTER TO MASTER_HOST='172.18.0.4',
     -> MASTER_LOG_POS=797;
 Query OK, 0 rows affected, 2 warnings (0.01 sec)
 
+# 开启Slave从机的复制
 mysql> START SLAVE;
 Query OK, 0 rows affected (0.00 sec)
 
+
+# 查看Slave状态
 mysql> SHOW SLAVE STATUS\G
 *************************** 1. row ***************************
                Slave_IO_State: Waiting for master to send event
