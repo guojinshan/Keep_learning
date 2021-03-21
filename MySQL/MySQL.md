@@ -1486,7 +1486,7 @@ Query OK, 0 rows affected (0.00 sec)
 # my.cnf
 [mysqld]
 # 1.这个是开启慢查询，注意ON需要大写
-slow_query_log=ON  
+slow_query_log=ON 
 
 # 2.这个是存储慢查询的日志文件，这个文件不存在的话，需要自己创建
 slow_query_log_file=/var/lib/mysql/slow.log
@@ -1507,41 +1507,47 @@ mysql> SHOW VARIABLES LIKE 'long_query_time%';
 1 row in set (0.00 sec)
 
 # 修改long_query_time
-`mysql> SET GLOBAL long_query_time=1;`
+mysql> SET GLOBAL long_query_time=1;
 
 设置后为什么看不出变化？ 解决方法：
-	需要重新连接或新开一个会话才能看到修改值，并再次使用`SHOW VARIABLES LIKE 'long_query_time%';`
-	也可以使用`SHOW GLOBAL VARIABLES LIKE 'long_query_time%';`
-
+	需要重新连接或新开一个会话才能看到修改值，并再次使用SHOW VARIABLES LIKE 'long_query_time%';
+	也可以使用SHOW GLOBAL VARIABLES LIKE 'long_query_time%';
+	
 # 如需永久修改`long_query_time`的时间，需要修改`my.cnf`配置文件
 # my.cnf
 [mysqld]
 # 这个是设置慢查询的时间，我设置的为1秒
 long_query_time=1
+log_output = FILE
 ```
 
 > 如何测试
 
+```
+# 模拟一个慢SQL
+mysql> SELECT SLEEP(4);
 
+# 在日志文件中查看
+shell> cat /var/lib/mysql/slow.log
+```
 
-
-> 查询慢查询日志的总记录条数
+> 查询慢查询日志的总记录条数(记录数越多，性能越坏)
 
 ```
 mysql> SHOW GLOBAL STATUS LIKE '%Slow_queries%';
 +---------------+-------+
 | Variable_name | Value |
 +---------------+-------+
-| Slow_queries  | 3     |
+| Slow_queries  | 1     |
 +---------------+-------+
 1 row in set (0.00 sec)
 ```
 
 ## 13.2.日志分析工具
 
-日志分析工具`mysqldumpslow`：在生产环境中，如果要手工分析日志，查找、分析SQL，显然是个体力活，MySQL提供了日志分析工具`mysqldumpslow`。
+日志分析工具`mysqldumpslow`：在生产环境中，如果要手工分析日志，查找、分析SQL，显然是个体力活，MySQL提供了日志分析工具`mysqldumpslow`
 
-```shell
+```
 # 1、mysqldumpslow --help 来查看mysqldumpslow的帮助信息
 root@1dcb5644392c:/usr/bin# mysqldumpslow --help
 Usage: mysqldumpslow [ OPTS... ] [ LOGS... ]
@@ -1566,23 +1572,23 @@ Parse and summarize the MySQL slow query log. Options are
   -t NUM       just show the top n queries  # 返回前面多少条记录
   -a           don't abstract all numbers to N and strings to 'S'
   -n NUM       abstract numbers with at least n digits within names
-  -g PATTERN   grep: only consider stmts that include this string  
+  -g PATTERN   grep: only consider stmts that include this string # 后面搭配一个正则匹配模式，大小写不敏感
   -h HOSTNAME  hostname of db server for *-slow.log filename (can be wildcard),
                default is '*', i.e. match all
   -i NAME      name of server instance (if using mysql.server startup script)
   -l           don't subtract lock time from total time
   
 # 2、 案例
-# 2.1、得到返回记录集最多的10个SQL
+# 2.1 得到返回记录集最多的10个SQL
 mysqldumpslow -s r -t 10 /var/lib/mysql/slow.log
  
-# 2.2、得到访问次数最多的10个SQL
+# 2.2 得到访问次数最多的10个SQL
 mysqldumpslow -s c -t 10 /var/lib/mysql/slow.log
  
-# 2.3、得到按照时间排序的前10条里面含有左连接的查询语句
+# 2.3 得到按照时间排序的前10条里面含有左连接的查询语句
 mysqldumpslow -s t -t 10 -g "left join" /var/lib/mysql/slow.log
 
-# 2.4、另外建议使用这些命令时结合|和more使用，否则出现爆屏的情况
+# 2.4 另外建议使用这些命令时结合|和more使用，否则出现爆屏的情况
 mysqldumpslow -s r -t 10 /var/lib/mysql/slow.log | more
 ```
 
@@ -1590,7 +1596,7 @@ mysqldumpslow -s r -t 10 /var/lib/mysql/slow.log | more
 
 ## 14.1.环境准备
 
-> 1、建表SQL。
+> 1、建表SQL
 
 ```mysql
 /* 1.dept表 */
@@ -1600,7 +1606,7 @@ CREATE TABLE `dept` (
   `dname` varchar(20) NOT NULL DEFAULT '' COMMENT '部门名字',
   `loc` varchar(13) NOT NULL DEFAULT '' COMMENT '部门地址',
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='部门表'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='部门表';
 
 /* 2.emp表 */
 CREATE TABLE `emp` (
@@ -1614,12 +1620,12 @@ CREATE TABLE `emp` (
   `comm` decimal(7,2) NOT NULL COMMENT '分红',
   `deptno` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '部门id',
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='员工表'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='员工表';
 ```
 
-> 2、由于开启过慢查询日志，开启了`bin-log`，我们就必须为`function`指定一个参数，否则使用函数会报错。
+> 2、由于开启过慢查询日志，开启了`bin-log`，我们就必须为`function`指定一个参数，否则使用函数会报错'This function has none of DETERMINISTIC......'
 
-```shell
+```
 # 在mysql中设置 
 # log_bin_trust_function_creators 默认是关闭的 需要手动开启
 mysql> SHOW VARIABLES LIKE 'log_bin_trust_function_creators';
@@ -1634,7 +1640,7 @@ mysql> SET GLOBAL log_bin_trust_function_creators=1;
 Query OK, 0 rows affected (0.00 sec)
 ```
 
-上述修改方式MySQL重启后会失败，在`my.cnf`配置文件下修改永久有效。
+上述修改方式MySQL重启后会失败，在`my.cnf`配置文件下修改永久有效
 
 ```shell
 [mysqld]
@@ -1644,7 +1650,7 @@ log_bin_trust_function_creators=ON
 ## 14.2.创建函数
 
 ```mysql
-# 1、函数：随机产生字符串
+# 1、函数：随机产生字符串,保证每条数据都不同
 DELIMITER $$
 CREATE FUNCTION rand_string(n INT) RETURNS VARCHAR(255)
 BEGIN
@@ -1676,13 +1682,13 @@ DELIMITER $$
 CREATE PROCEDURE insert_dept(IN START INT(10),IN max_num INT(10))
 BEGIN
 DECLARE i INT DEFAULT 0;
-    SET autocommit = 0;
+    SET autocommit = 0; # 将自动提交设置为0，重要！否则每执行一条SQL就自动提交一次
     REPEAT
     SET i = i + 1;
     INSERT INTO dept(deptno,dname,loc) VALUES((START + i),rand_string(10),rand_string(8));
     UNTIL i = max_num
     END REPEAT;
-    COMMIT;
+    COMMIT; # 一次性提交
 END $$
 
 # 2、函数：向emp表批量插入
@@ -1690,24 +1696,24 @@ DELIMITER $$
 CREATE PROCEDURE insert_emp(IN START INT(10),IN max_num INT(10))
 BEGIN
 DECLARE i INT DEFAULT 0;
-    SET autocommit = 0;
+    SET autocommit = 0; # 将自动提交设置为0，重要！否则每执行一条SQL就自动提交一次
     REPEAT
     SET i = i + 1;
     INSERT INTO emp(empno,ename,job,mgr,hiredata,sal,comm,deptno) VALUES((START + i),rand_string(6),'SALESMAN',0001,CURDATE(),2000,400,rand_num());
     UNTIL i = max_num
     END REPEAT;
-    COMMIT;
+    COMMIT;  # 一次性提交
 END $$
 ```
 
 ## 14.4.调用存储过程
 
 ```mysql
-# 1、调用存储过程向dept表插入10个部门。
+# 1、调用存储过程向dept表插入10个部门
 DELIMITER ;
 CALL insert_dept(100,10);
 
-# 2、调用存储过程向emp表插入50万条数据。
+# 2、调用存储过程向emp表插入50万条数据
 DELIMITER ;
 CALL insert_emp(100001,500000);
 ```
@@ -1716,15 +1722,15 @@ CALL insert_emp(100001,500000);
 
 > Show Profile是什么？
 
-`Show Profile`：MySQL提供可以用来分析当前会话中语句执行的资源消耗情况。可以用于SQL的调优的测量。**默认情况下，参数处于关闭状态，并保存最近15次的运行结果。**
+`Show Profile`：MySQL提供可以用来分析当前会话中语句执行的资源消耗情况，可以用于SQL的细粒度调优的测量。**默认情况下，参数处于关闭状态，并保存最近15次的运行结果**
 
 > 分析步骤
 
-1、是否支持，看看当前的MySQL版本是否支持。
+1、是否支持，看看当前的MySQL版本是否支持
 
-```shell
+```
 # 查看Show Profile功能是否开启
-mysql> SHOW VARIABLES LIKE 'profiling';
+mysql> SHOW VARIABLES LIKE 'profiling%';
 +---------------+-------+
 | Variable_name | Value |
 +---------------+-------+
@@ -1733,9 +1739,9 @@ mysql> SHOW VARIABLES LIKE 'profiling';
 1 row in set (0.00 sec)
 ```
 
-2、开启`Show Profile`功能，默认是关闭的，使用前需要开启。
+2、开启`Show Profile`功能，默认是关闭的，使用前需要开启
 
-```shell
+```
 # 开启Show Profile功能
 mysql> SET profiling=ON;
 Query OK, 0 rows affected, 1 warning (0.00 sec)
@@ -1743,7 +1749,7 @@ Query OK, 0 rows affected, 1 warning (0.00 sec)
 
 3、运行SQL
 
-```mysql
+```
 SELECT * FROM `emp` GROUP BY `id`%10 LIMIT 150000;
 
 SELECT * FROM `emp` GROUP BY `id`%20 ORDER BY 5;
@@ -1751,27 +1757,25 @@ SELECT * FROM `emp` GROUP BY `id`%20 ORDER BY 5;
 
 4、查看结果，执行`SHOW PROFILES;`
 
-`Duration`：持续时间。
-
-```shell
+```
 mysql> SHOW PROFILES;
-+----------+------------+---------------------------------------------------+
-| Query_ID | Duration   | Query                                             |
-+----------+------------+---------------------------------------------------+
-|        1 | 0.00156100 | SHOW VARIABLES LIKE 'profiling'                   |
-|        2 | 0.56296725 | SELECT * FROM `emp` GROUP BY `id`%10 LIMIT 150000 |
-|        3 | 0.52105825 | SELECT * FROM `emp` GROUP BY `id`%10 LIMIT 150000 |
-|        4 | 0.51279775 | SELECT * FROM `emp` GROUP BY `id`%20 ORDER BY 5   |
++----------+---------------------+---------------------------------------------------+
+| Query_ID | Duration(持续时间)   | Query(查询语句)                                             |
++----------+---------------------+---------------------------------------------------+
+|        1 | 	 0.00156100 	 | SHOW VARIABLES LIKE 'profiling'                   |
+|        2 | 	 0.56296725      | SELECT * FROM `emp` GROUP BY `id`%10 LIMIT 150000 |
+|        3 | 	 0.52105825      | SELECT * FROM `emp` GROUP BY `id`%10 LIMIT 150000 |
+|        4 | 	 0.51279775      | SELECT * FROM `emp` GROUP BY `id`%20 ORDER BY 5   |
 +----------+------------+---------------------------------------------------+
 4 rows in set, 1 warning (0.00 sec)
 ```
 
 5、诊断SQL，`SHOW PROFILE cpu,block io FOR QUERY Query_ID;`
 
-```shell
+```
 # 这里的3是第四步中的Query_ID。
-# 可以在SHOW PROFILE中看到一条SQL中完整的生命周期。
-mysql> SHOW PROFILE cpu,block io FOR QUERY 3;
+# 可以在SHOW PROFILE中看到一条SQL中完整的生命周期
+mysql> SHOW PROFILE CPU,BLOCK IO FOR QUERY 3;
 +----------------------+----------+----------+------------+--------------+---------------+
 | Status               | Duration | CPU_user | CPU_system | Block_ops_in | Block_ops_out |
 +----------------------+----------+----------+------------+--------------+---------------+
@@ -1801,24 +1805,53 @@ mysql> SHOW PROFILE cpu,block io FOR QUERY 3;
 
 `Show Profile`查询参数备注：
 
-- `ALL`：显示所有的开销信息。
-- `BLOCK IO`：显示块IO相关开销（通用）。
-- `CONTEXT SWITCHES`：上下文切换相关开销。
-- `CPU`：显示CPU相关开销信息（通用）。
-- `IPC`：显示发送和接收相关开销信息。
-- `MEMORY`：显示内存相关开销信息。
-- `PAGE FAULTS`：显示页面错误相关开销信息。
-- `SOURCE`：显示和Source_function。
-- `SWAPS`：显示交换次数相关开销的信息。
-
-
+- `ALL`：显示所有的开销信息
+- `BLOCK IO`：显示块IO相关开销（通用）
+- `CONTEXT SWITCHES`：上下文切换相关开销
+- `CPU`：显示CPU相关开销信息（通用）
+- `IPC`：显示发送和接收相关开销信息
+- `MEMORY`：显示内存相关开销信息
+- `PAGE FAULTS`：显示页面错误相关开销信息
+- `SOURCE`：显示和Source_function
+- `SWAPS`：显示交换次数相关开销的信息
 
 6、`Show Profile`查询列表，日常开发需要注意的结论：
 
-- `converting HEAP to MyISAM`：查询结果太大，内存都不够用了，往磁盘上搬了。
-- `Creating tmp table`：创建临时表（拷贝数据到临时表，用完再删除），非常耗费数据库性能。
-- `Copying to tmp table on disk`：把内存中的临时表复制到磁盘，危险！！！
-- `locked`：死锁。
+- `converting HEAP to MyISAM`：查询结果太大，内存都不够用了，往磁盘上搬了
+- `Creating tmp table`：创建临时表-拷贝数据到临时表-用完再删除，非常耗费数据库性能
+- `Copying to tmp table`：把内存中的临时表复制到磁盘，非常危险！！！
+- `locked`：死锁
+
+> 全局查询日志(只能用在测试环境，永远不要用在生产环境, 否则人就没了)
+
+```
+# 查看是否开启全局日志查询
+mysql> SHOW VARIABLES LIKE 'general_log%';
++------------------+---------------------+
+| Variable_name    | Value               |
++------------------+---------------------+
+| general_log      | OFF                 |
+| general_log_file | WIN-GVOTK8E4SKI.log |
++------------------+---------------------+
+2 rows in set, 1 warning (0.00 sec)
+
+# 开启全局日志查询
+mysql> SET GLOBAL general_log = 1;
+Query OK, 0 rows affected (0.00 sec)
+
+# 设置输出形式, 此后编写的SQL语句将会记录到MySQL库里的general_log表中
+mysql> SET GLOBAL log_output='TABLE';
+Query OK, 0 rows affected (0.00 sec)
+
+# 使用以下命令查看general_log表中的记录
+mysql> SELECT * FROM mysql.general_log;
++----------------------------+------------------+-----------+-----------+--------+-----------------+
+|       event_time           |  user_host       | thread_id | server_id | command_type | argument|
++----------------------------+------------------------------+----+---+--------+---------------------------------+
+| 2021-03-21 10:23:38.500321 | root[root] @ localhost [::1] |  8 | 1 | Query  | SELECT * FROM dept              |
+| 2021-03-21 10:23:43.567267 | root[root] @ localhost [::1] |  8 | 1 | Query  | SELECT * FROM mysql.general_log |
++----------------------------+------------------------------+----+---+--------+---------------------------------+
+```
 
 # 16.表锁(偏读)
 
