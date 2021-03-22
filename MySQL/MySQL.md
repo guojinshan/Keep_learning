@@ -418,6 +418,7 @@ ALTER TABLE tabName ADD FULLTEXT indexName(column_list);
 - `R-Tree`R数索引
 
 > `BTree`B树索引检索原理：
+
 ![BTree](https://github.com/guojinshan/Keep_learning/blob/main/MySQL/Picture/B-Tree.png)
 
 - 叶子结点具有相同的深度，叶节点的指针为空
