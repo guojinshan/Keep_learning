@@ -460,7 +460,7 @@ ALTER TABLE tabName ADD FULLTEXT indexName(column_list);
 - 查询中统计或者分组字段（`GROUP BY`也和索引有关）
 - **在高并发下倾向创建组合索引**
 
-## 7.5.那些情况不要建索引
+## 7.5.哪些情况不要建索引
 - 记录太少的表
 - 经常增删改(`Insert`, `Delete`, `Update`)的表, 因为频繁更新的字段不适合创建索引（每次更新不仅需要更新记录，还需要更新索引）
 - `WHERE`条件里**用不到的字段**不创建索引
