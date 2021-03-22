@@ -2765,3 +2765,195 @@ Master_SSL_Verify_Server_Cert: No
            Master_TLS_Version: 
 1 row in set (0.00 sec)
 ```
+
+# 18.MySQL表分区 [参考文章](https://www.jianshu.com/p/1cdd3e3c5b3c)
+
+## 18.1 分区表
+
+> 是什么？
+
+通俗地讲表分区是**将一大表，根据条件分割成若干个小表**，Mysql5.1开始支持数据表分区。如：某用户表的记录超过了600万条，那么就可以根据入库日期将表分区，也可以根据所在地将表分区，当然也可根据其他的条件分区
+
+> 实现原理
+
+分区表是由多个相关的底层表实现，这些底层表也是由句柄对象表示，所以我们也可以直接访问各个分区。存储引擎管理分区的各个底层表和管理普通表一样（所有的底层表都必须使用相同的存储引擎），分区表的索引只是在各个底层表上各自加上一个相同的索引，从存储引擎的角度来看，底层表和一个普通表没有任何不同，存储引擎也无须知道这是一个普通表还是一个分区表的一部分
+
+在分区表上的操作按照下面的操作逻辑进行：
+
+- `Select`查询：当查询一个分区表的时候，分区层先打开并锁住所有的底层表，优化器判断是否可以过滤部分分区，然后再调用对应的存储引擎接口访问各个分区的数据
+- `Insert`操作：当写入一条记录时，分区层打开并锁住所有的底层表，然后确定哪个分区接受这条记录，再将记录写入对应的底层表
+- `Delete`操作：当删除一条记录时，分区层先打开并锁住所有的底层表，然后确定数据对应的分区，最后对相应底层表进行删除操作
+- `Update`操作：当更新一条数据时，分区层先打开并锁住所有的底层表，Mysql先确定需要更新的记录在哪个分区，然后取出数据并更新，再判断更新后的数据应该放在哪个分区，然后对底层表进行写入操作，并对原数据所在的底层表进行删除操作
+
+虽然每个操作都会打开并锁住所有的底层表，但这并不是说分区表在处理过程中是锁住全表的，如果存储引擎能够自己实现行级锁，如InnoDB，则会在分区层释放对应的表锁，这个加锁和解锁过程与普通InnoDB上的查询类似
+
+> 优势与劣势
+
+优势：
+
++ 与单个磁盘或文件系统分区相比，可以存储更多的数据
++ 对于那些已经失去保存意义的数据，通常可以通过删除与那些数据有关的分区，很容易地删除那些数据。相反地，在某些情况下，添加新数据的过程又可以通过为那些新数据专门增加一个新的分区，来很方便地实现
++ 一些查询可以得到极大的优化，这主要是借助于满足一个给定WHERE语句的数据可以只保存在一个或多个分区内，这样在查找时就不用查找其他剩余的分区
++ 涉及到例如SUM()和COUNT()这样聚合函数的查询，可以很容易地进行并行处理。这种查询的一个简单例子如 `SELECT salesperson_id, COUNT (orders) as order_total FROM sales GROUP BY salesperson_id；`, 通过“并行”，这意味着该查询可以在每个分区上同时进行，最终结果只需通过总计所有分区得到的结果
++ 通过跨多个磁盘来分散数据查询，来获得更大的查询吞吐量
+
+劣势(更多的是限制)：
+
++ 一个表最多只能有1024个分区（`MySQL5.6`之后支持8192个分区）
++ 在`MySQL5.1`中分区表达式必须是整数，或者是返回整数的表达式，在`MySQL5.5`之后，某些场景可以直接使用字符串列和日期类型列来进行分区
++ 如果分区字段中有主键或者唯一索引列，那么所有主键列和唯一索引列都必须包含进来，如果表中有主键或唯一索引，那么分区键必须是主键或唯一索引
++ 分区表中无法使用外键约束
++ mysql数据库支持的分区类型为水平分区，并不支持垂直分区，因此，mysql数据库的分区中索引是局部分区索引，一个分区中既存放了数据又存放了索引，而全局分区是指的数据库放在各个分区中，但是所有的数据的索引放在另外一个对象中
++ 目前mysql不支持空间类型和临时表类型进行分区。不支持全文索引
+
+
+## 18.2 表分区的类型
+
+> RANGE分区(常用)
+
+基于属于一个给定连续区间的列值，把多行分配给分区，这些区间要连续且不能相互重叠，通过使用`PARTITION BY RANGE(expr)`和`VALUES LESS THAN (num)`操作符来进行定义
+
+```
+mysql> create table employees (
+    id int not null,
+    fname varchar(30),
+    lname varchar(30),
+    hired date not null default '1970-01-01',
+    separated date not null default '9999-12-31',
+    job_code int not null,
+    store_id int not null
+) partition by range (store_id) (
+    partition p0 values less than (6),
+    partition p1 values less than (11),
+    partition p2 values less than (16),
+    partition p3 values less than (21)，
+    partition p4 values less than maxvalue
+);
+```
+
+按照这种分区方案，在商店1到5工作的雇员相对应的所有行被保存在分区P0中，商店6到10的雇员保存在P1中，依次类推。注意，每个分区都是按顺序进行定义，从最低到最高。这是PARTITION BY RANGE 语法的要求；在这点上，它类似于C或Java中的“switch ... case”语句
+
+> LIST分区
+
+类似于按RANGE分区，区别在于LIST分区是基于列值匹配一个离散值集合中的某个值来进行选择。通过使用`PARTITION BY LIST(expr)`和`VALUES IN(value_list)`操作符来进行定义， 将要匹配的任何值都必须在值列表(value_list)中全部列出
+
+```
+假定有20个音像店，分布在4个有经销权的地区，如下所示：
+====================================
+地区      商店ID 号
+------------------------------------
+北区      3, 5, 6, 9, 17
+东区      1, 2, 10, 11, 19, 20
+西区      4, 12, 13, 14, 18
+中心区   7, 8, 15, 16
+====================================
+
+要按照属于同一个地区商店的行保存在同一个分区中的方式来分割表，可以使用下面的“CREATE TABLE”语句：
+
+mysql> create table employees (
+    id int not null,
+    fname varchar(30),
+    lname varchar(30),
+    hired date not null default '1970-01-01',
+    separated date not null default '9999-12-31',
+    job_code int not null,
+    store_id int not null
+) partition by list(store_id)
+    partition pNorth values in (3,5,6,9,17),
+    partition pEast values in (1,2,10,11,19,20),
+    partition pWest values in (4,12,13,14,18),
+    partition pCentral values in (7,8,15,16)
+)；
+```
+
+这使得在表中增加或删除指定地区的雇员记录变得容易起来。例如，假定西区的所有音像店都卖给了其他公司。那么与在西区音像店工作雇员相关的所有记录（行）可以使用查询`ALTER TABLE employees DROP PARTITION pWest；`来进行删除，它与具有同样作用的`DELETE query DELETE FROM employees WHERE store_id IN (4,12,13,14,18)；`比起来效率要高很多
+
+> HASH分区
+
+基于用户定义的表达式的返回值来进行选择的分区，该表达式使用将要插入到表中的这些行的列值进行计算，通过使用`PARTITION BY HASH(expr)`和`PARTITIONS num`操作符来进行定义
+
+```
+mysql> create table employees (
+    id int not null,
+    fname varchar(30),
+    lname varchar(30),
+    hired date not null default '1970-01-01',
+    separated date not null default '9999-12-31',
+    job_code int not null,
+    store_id int not null
+) partition by hash(store_id)
+partitions 4；  #表将要被分割成分区的数量， 默认为1
+```
+
+> KEY分区
+
+类似于按HASH分区，区别在于KEY分区只支持计算一列或多列，且MySQL 服务器提供其自身的哈希函数。必须有一列或多列包含整数值
+
+```
+mysql> create table tk (
+    col1 int not null,
+    col2 char(5),
+    col3 date
+) partition by linear key (col1)
+partitions 3;
+```
+
+在KEY分区中使用关键字LINEAR和在HASH分区中使用具有同样的作用，分区的编号是通过2的幂（powers-of-two）算法得到，而不是通过模数算法
+
+
+## 18.3 表分区的相关操作
+
+```
+# 建立表分区
+mysql> create table employees (
+    id int not null,
+    fname varchar(30),
+    lname varchar(30),
+    hired date not null default '1970-01-01',
+    separated date not null default '9999-12-31',
+    job_code int not null,
+    store_id int not null
+) partition by range (store_id) (
+    partition p0 values less than (6),
+    partition p1 values less than (11),
+    partition p2 values less than (16),
+    partition p3 values less than (21)，
+    partition p4 values less than maxvalue
+);
+
+# 增加表分区
+mysql> ALTER TABLE sale_data ADD PARTITION (PARTITION s20100402 VALUES LESS THAN (20100403));
+
+# 删除表分区
+mysql> ALTER TABLE sale_data DROP PARTITION s20100406 ;
+
+# 向表分区插入数据
+mysql> insert into sale_data values('2010-04-01','11',11.11);
+
+# 查看表分区
+mysql> SELECT PARTITION_NAME,TABLE_ROWS FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_NAME = 'sale_data';
+```
+
+## 18.4 分区使用场景
+
+- 当数据量很大(过T)时，肯定不能把数据一次性加载到内存中，这样查询一个或一定范围的记录是很耗时。另外一般这情况下，历史数据或不常访问的数据占很大部分，最新或热点数据占的比例不是很大，这时可以根据某些条件进行表分区
+- 分区表的更易于管理，比如删除过去某一时间的历史数据，直接执行`TRUNCATE`，或者狠点`DROP`整个分区，这比`DELETE`删除效率更高
+- 当数据量很大，或者将来很大的，但单块磁盘的容量不够，或者想提升I/O效率的时候，可以把未分区中的子分区挂载到不同的磁盘上
+- 使用分区表可避免某些特殊的瓶颈，例如InnoDB的单个索引的互斥访问
+- 在某些场景下，单个分区表的备份和恢复更有效率
+- 项目中需要动态新建、删除分区。如新闻表，按照时间维度中的月份对其分区，为了防止新闻表过大，只保留最近6个月的分区，同时预建后面3个月的分区，这个删除、预建分区的过程就是分区表的动态管理
+
+总结：可伸缩性，可管理性，提高数据库查询效率
+
+
+# 19.实际应用场景
+
+> MySQL如何快速删除大量数据(千万级别)？ [参考文章+Python代码实现](https://blog.csdn.net/weixin_33817140/article/details/114344233?utm_medium=distribute.pc_relevant.none-task-blog-BlogCommendFromMachineLearnPai2-1.control&dist_request_id=&depth_1-utm_source=distribute.pc_relevant.none-task-blog-BlogCommendFromMachineLearnPai2-1.control)
+
++ 方法一：如果删除整表数据，直接使用TRUNCATE TABLE命令就好
++ 方法二：使用DELETE进行批量删除，通过LIMIT每次限定一定的数量，然后循环删除知道全部数据删除完毕，同时key_buffer_size由默认的8M提高512M
++ 方法三：使用HASH分区通过PARTITION BY给表创建分区，通过EXPLAIN PARTITIONS获取分区后, 使用TRUNCATE PARTITION直接按分区进行删除,特别快
+
+注意：如果删除的数据超过表数据的百分之50，建议拷贝所需数据到临时表，创建备份，然后删除原表，再重命名临时表为原表
+
+
