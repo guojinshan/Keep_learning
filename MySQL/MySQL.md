@@ -2036,6 +2036,7 @@ BASE理论是对CAP理论的延伸，思想是即使无法做到强一致性（C
 	
 	 + 用户级线程与内核级线程的组合实现
 	 ![组合实现方式](https://img-blog.csdn.net/20180320045459981?watermark/2/text/Ly9ibG9nLmNzZG4ubmV0L3UwMTMwMDc5MDA=/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70)
+	 
 	 线程创建完全在用户空间中完成，线程的调度和同步也在应用程序中进行，一个应用程序中的多个用户级线程被映射到一些(小于或等于用户级线程的数目）内核级线程上，在这种模型中，每个内核级线程有一个可以轮流使用的用户级线程集合
 	 
 
