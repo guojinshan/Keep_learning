@@ -10,7 +10,7 @@
 
 + 数据源：业务数据、数据库数据(OLTP)、文档数据、日志数据等
 
-![数据仓库体系结构](https://pic2.zhimg.com/80/v2-d7dbc4c757152f64ebc6cd52009ddbad_720w.jpg)
+![数据仓库体系结构](https://pic2.zhimg.com/v2-d7dbc4c757152f64ebc6cd52009ddbad_b.jpg)
 
 ## 3. 数据仓库的特点
 
