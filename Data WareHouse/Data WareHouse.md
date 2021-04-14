@@ -246,4 +246,6 @@ DWS(Data Warehouse Service)为数据汇总层，主要包含两类汇总表：�
 + 减少应用对DW的压力：以业务应用驱动为导向建模，通过ST、DW层提供数据。避免直接操作基础事实表；降低数据获取时间
 + 快速适应需求变更：适应维度变化；明细基础数据层稳定；适应前应用层业务需求变更；所有前端应用层模型之间不存在依赖，需求变更对DW整个模型影响范围小；能适应短周期内上线下线需求
 
-![DW五层模型架构介绍]()
+![DW五层模型架构介绍](https://github.com/guojinshan/Keep_learning/blob/main/Data%20WareHouse/%5BDW%E4%BA%94%E5%B1%82%E6%A8%A1%E5%9E%8B%E6%9E%B6%E6%9E%84%E4%BB%8B%E7%BB%8D.jpg)
+
+
