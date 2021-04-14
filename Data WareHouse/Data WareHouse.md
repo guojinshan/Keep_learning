@@ -463,4 +463,6 @@ where link_start_date<'2020-08-21' and  link_end_date>='2015-08-21'
 
 数据集市(Data Mart): 是满足特定部门或者用户的需求，按照多维方式存储，面向决策分析的数据立方体
 
-[回看链接](https://my.oschina.net/u/4631230/blog/4688808)
+[回看链接1](https://my.oschina.net/u/4631230/blog/4688808)
+[回看链接2](https://blog.csdn.net/Avery123123/article/details/107895209)
+
