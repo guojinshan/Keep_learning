@@ -265,4 +265,4 @@ DWS(Data Warehouse Service)为数据汇总层，主要包含两类汇总表：�
 + 数据挖掘：从隐藏模式中发现知识，支持关联分析，构建分析性模型，分类和预测，并用可视化工具呈现挖掘的结果
 
 # 九、 数据分析与数据挖掘的区别和联系
-![数据分析与数据挖掘的区别和联系]()
+![数据分析与数据挖掘的区别和联系](https://github.com/guojinshan/Keep_learning/blob/main/Data%20WareHouse/%E6%95%B0%E6%8D%AE%E6%8C%96%E6%8E%98%E5%92%8C%E6%95%B0%E6%8D%AE%E5%88%86%E6%9E%90%E7%9A%84%E5%8C%BA%E5%88%AB%E5%92%8C%E8%81%94%E7%B3%BB.jpg)
