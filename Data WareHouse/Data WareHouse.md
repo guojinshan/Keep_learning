@@ -266,3 +266,36 @@ DWS(Data Warehouse Service)为数据汇总层，主要包含两类汇总表：�
 
 # 九、 数据分析与数据挖掘的区别和联系
 ![数据分析与数据挖掘的区别和联系](https://github.com/guojinshan/Keep_learning/blob/main/Data%20WareHouse/%E6%95%B0%E6%8D%AE%E6%8C%96%E6%8E%98%E5%92%8C%E6%95%B0%E5%88%86%E7%9A%84%E5%8C%BA%E5%88%AB%E5%92%8C%E8%81%94%E7%B3%BB.jpg)
+
+# 十、常见面试题
+## 1. 手写“从'2020-08-10'起，员工连续7天打卡”的SQL
+```sql
+// 根据实际需求进行相应操作
+select t3.user_id, t3.count_day   
+  // 根据用户id和日期差聚合算出连续打卡天数count_day --> 此时以获取员工连续打卡天数表格   
+  (select t2.user_id, t2.diff_date, count(1) as count_day from   
+   // 根据排序结果获取日期差-->日期差相等则连续   
+   (select t1.user_id, t1.date_id, date_sub(t1.date_id, rn) as diff_date from   
+    // 根据筛选条件在where中取出数据后，使用开窗函数按用户id聚合、日期增序排序   
+    (select user_id, date_id, row_number() over(partition by user_id order by date_id) rn from events    
+      where date_id>='2020-08-10' and success=1) t1   
+     ) t2   
+     group by user_id, diff_date) t3   
+ where t3.count_day >=7;
+```
+
+## 2. 维度建模和范式建模的区别
+范式建模，即3NF模型具有以下特点:
++ (1NF) 原子性，即数据不可分割
++ (2NF) 基于第一个条件，实体属性完全依赖于主键，不能存在仅依赖主关键字一部分属性， 即不能存在部分依赖
++ (3NF) 基于第二个条件，任何非主属性不依赖于其他非主属性。即消除传递依赖
+基于以上三个特点，3NF的最终目的就是为了降低数据冗余，保障数据一致性,，同时也有了数据关联逻辑复杂的缺点
+
+维度建模是面向分析场景的，主要关注点在于快速、灵活，能够提供大规模的数据响应：
++ 星型模型：即由一个事实表和一组维度表组成，每个维表都有一个维度作为主键，事实表居中，多个维表呈辐射状分布在四周，并与事实表关联，形成一个星型结构
++ 雪花模型：在星型模型的基础上，基于范式理论进一步层次化，将某些维表扩展成事实表，最终形成雪花状结构
++ 星座模型：基于多个事实表，共享一些维度表
+
+
+
+
