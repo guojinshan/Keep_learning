@@ -292,10 +292,175 @@ select t3.user_id, t3.count_day
 基于以上三个特点，3NF的最终目的就是为了降低数据冗余，保障数据一致性,，同时也有了数据关联逻辑复杂的缺点
 
 维度建模是面向分析场景的，主要关注点在于快速、灵活，能够提供大规模的数据响应：
-+ 星型模型：即由一个事实表和一组维度表组成，每个维表都有一个维度作为主键，事实表居中，多个维表呈辐射状分布在四周，并与事实表关联，形成一个星型结构
-+ 雪花模型：在星型模型的基础上，基于范式理论进一步层次化，将某些维表扩展成事实表，最终形成雪花状结构
-+ 星座模型：基于多个事实表，共享一些维度表
++ 星型模型：即由一个事实表和一组维度表组成，每个维表都有一个维度作为主键，事实表居中，多个维表呈辐射状分布在四周，并与事实表关联，形成一个星型结构 ([星型模型图](https://github.com/guojinshan/Keep_learning/blob/main/Data%20WareHouse/%E6%98%9F%E5%9E%8B%E6%A8%A1%E5%9E%8B.jpg)）
++ 雪花模型：在星型模型的基础上，基于范式理论进一步层次化，将某些维表扩展成事实表，最终形成雪花状结构（[雪花模型图](https://github.com/guojinshan/Keep_learning/blob/main/Data%20WareHouse/%E9%9B%AA%E8%8A%B1%E6%A8%A1%E5%9E%8B.png)）
++ 星座模型：基于多个事实表，共享一些维度表（[星座模型图](https://github.com/guojinshan/Keep_learning/blob/main/Data%20WareHouse/%E6%98%9F%E5%BA%A7%E6%A8%A1%E5%9E%8B.png)）
 
+## 3. 数据漂移如何解决
+> 什么是数据漂移？
+通常是指ods表的同一个业务日期数据中包含了前一天或后一天凌晨附近的数据或者丢失当天变更的数据，这种现象就叫做漂移，且在大部分公司中都会遇到的场景
 
+> 如何解决数据漂移问题？
++ 方案一：多获取后一天的数据，保障数据只多不少 (暴力)
++ 方案二：通过多个时间戳字段来限制时间获取相对准确的数据
 
+通常，时间戳字段分为四类：
+1. 数据库表中用来标识数据**记录更新时间**的时间戳字段（假设这类字段叫 modified time）
+2. 数据库日志中用来标识**数据记录更新时间**的时间戳字段·（假设这类宇段叫 log_time）
+3. 数据库表中用来记录**具体业务过程发生时间**的时间戳字段 （假设这类字段叫 proc_time）
+4. 标识数据记录**被抽取到时间**的时间戳字段（假设这类字段extract time）
 
+理论上这几个时间应该是一致的，但往往会出现差异，造成的原因可能为：
+1. 数据抽取需要一定的时间，extract_time往往晚于前三个时间
+2. 业务系统手动改动数据并未更新modfied_time
+3. 网络或系统压力问题，log_time或modified_time晚于proc_time
+通常都是根据以上的某几个字段来切分ODS表，这就产生了数据漂移，具体场景如下：
+1. 根据extract_time进行同步
+2. 根据modified_time进行限制同步， 在实际生产中这种情况最常见，但是往往会发生不更新 modified time 而导致的数据遗漏，或者凌晨时间产生的数据记录漂移到后一天，由于网络或者系统压力问题， log_time 会晚proc_time ，从而导致凌晨时间产生的数据记录漂移到后一天
+3. 根据proc_time来限制，会违背ods和业务库保持一致的原则，因为仅仅根据proc_time来限制，会遗漏很多其他过程的变化
+
+具体解决方案步骤:
+1. 首先通过log_time多同步前一天最后15分钟和后一天凌晨开始15分钟的数据，然后用modified_time过滤非当天的数据，这样确保数据不会因为系统问题被遗漏
+2. 然后根据log_time获取后一天15分钟的数据，基于这部分数据，按照主键根据log_time做升序排序，那么第一条数据也就是最接近当天记录变化的
+3. 最后将前两步的数据做全外连接，通过限制业务时间proc_time来获取想要的数据
+
+## 4. 拉链表如何设计，拉链表出现数据回滚的需求怎么解决
+拉链表使用的场景：
++ 数据量大，且表中部分字段会更新，比如用户地址、产品描述信息、订单状态等等
++ 需要查看某一个时间段的历史快照信息
++ 变化比例和频率不是很大
+
+```sql
+  --拉链表实现
+  --原始数据
+  CREATE TABLE wedw_tmp.tmp_orders (
+      orderid INT,
+      createtime STRING,
+      modifiedtime STRING,
+      status STRING
+  ) stored AS textfile;
+  
+ --拉链表
+ CREATE TABLE wedw_tmp.tmp_orders_dz(
+     orderid int,
+     createtime STRING,
+     modifiedtime STRING,
+     status STRING,
+     link_start_date string,
+     link_end_date string
+ ) stored AS textfile;
+ 
+ --更新表
+ CREATE TABLE wedw_tmp.tmp_orders_update(
+     orderid INT,
+     createtime STRING,
+     modifiedtime STRING,
+     status STRING
+ ) stored AS textfile;
+ 
+ --插入原始数据
+ insert overwrite table  wedw_tmp.tmp_orders
+ select 1,"2015-08-18","2015-08-18","创建"
+ union all 
+ select 2,"2015-08-18","2015-08-18","创建"
+ union all
+ select 3,"2015-08-19","2015-08-21","支付"
+ union all
+ select 4,"2015-08-19","2015-08-21","完成"
+ union all 
+ select 5,"2015-08-19","2015-08-20","支付"
+ union all 
+ select 6,"2015-08-20","2015-08-20","创建"
+ union all 
+ select 7,"2015-08-20","2015-08-21","支付"
+ 
+ --拉链表初始化
+ insert into  wedw_tmp.tmp_orders_dz
+ select *,createtime,'9999-12-31'  from  wedw_tmp.tmp_orders
+ 
+ --增量数据
+ insert into  wedw_tmp.tmp_orders_update
+ select 3,"2015-08-19","2015-08-21","支付"
+ union all
+ select 4,"2015-08-19","2015-08-21","完成"
+ union all 
+ select 7,"2015-08-20","2015-08-21","支付"
+ union all 
+ select 8,"2015-08-21","2015-08-21","创建" 
+ 
+ --更新拉链表
+ insert overwrite table  wedw_tmp.tmp_orders_dz
+ select 
+     t1.orderid,
+     t1.createtime,
+     t1.modifiedtime,
+     t1.status,
+     t1.link_start_date,
+     case when t1.link_end_date='9999-12-31' and t2.orderid is not null then '2015-08-20'
+     else t1.link_end_date
+     end as link_end_date
+ from  wedw_tmp.tmp_orders_dz t1
+ left join wedw_tmp.tmp_orders_update t2
+ on t1.orderid = t2.orderid
+ union all 
+ select 
+   orderid,
+   createtime,
+   modifiedtime,
+   status,
+   '2015-08-21' as link_start_date,
+   '9999-12-31' as link_end_date
+ from wedw_tmp.tmp_orders_update
+ 
+ --拉链表回滚，比如在插入2015-08-22的数据后，
+ -- 回滚2015-08-21的数据，使拉链表与2015-08-20的一致
+ -- 具体操作过程如下
+ select 
+   orderid,
+   createtime,
+   modifiedtime,
+   status,
+   link_start_date,
+   link_end_date
+ from wedw_tmp.tmp_orders_dz
+ where link_end_date<'2015-08-20'
+ union all 
+ select 
+   orderid,
+   createtime,
+   modifiedtime,
+  status,
+  link_start_date,
+  '9999-12-31'
+from wedw_tmp.tmp_orders_dz
+where link_end_date='2015-08-20'
+union all 
+select 
+  orderid,
+  createtime,
+  modifiedtime,
+  status,
+  link_start_date,
+  '9999-12-31'
+from wedw_tmp.tmp_orders_dz
+where link_start_date<'2020-08-21' and  link_end_date>='2015-08-21'
+```
+
+## sql里面on和where有区别吗
+数据库在通过连接两张或多张表来返回记录时，都会生成一张中间的临时表。以 LEFT JOIN 为例：在使用 LEFT JOIN 时，ON 和 WHERE 过滤条件的区别如下：
++ on 条件是在生成临时表时使用的条件，它不管on中的条件是否为真，都会返回左边表中的记录
++ where 条件是在临时表生成好后，再对临时表进行过滤的条件，这时已经没有 left join 的含义（必须返回左边表的记录）了，条件不为真的就全部过滤掉
+
+# 公共层和数据集市层的区别和特点
+公共维度模型层(CDM), 又细分为dwd层和dws层，主要存放明细事实数据、维表数据以及公共指标汇总数据，其中明细事实数据、维表数据一般是根据ods层数据加工生成的，公共指标汇总数据一般是基于维表和明细事实数据加工生成的
+
+采用维度模型方法作为理论基础，更多采用一些维度退化的手段，将维度退化到事实表中，减少事实表和维度表之间的关联。同时在汇总层，加强指标的维度退化，采用更多的宽表化手段构建公共指标数据层，提升公共指标的复用性，减少重复加工
+
+其主要功能：
+1. 组合相关和相似数据：采用明细宽表，复用关联计算，减少数据扫描
+2. 公共指标统一加工：基于 OneData 体系构建命名规范、口径一致 和算法统一的统计指标，为上层数据产品、应用和服务提供公共指标建立逻辑汇总宽表
+3. 建立一致性维度：建立一致的数据分析维表，降低数据计算口径、 算法不统一的风险。应用数据层（ ADS）：存放数据产品个性化的统计指标数据，根据 CDM 层与 ODS 层加工生成
+
+数据集市(Data Mart): 是满足特定部门或者用户的需求，按照多维方式存储，面向决策分析的数据立方体
+
+[回看链接](https://my.oschina.net/u/4631230/blog/4688808)
