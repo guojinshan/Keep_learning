@@ -3053,7 +3053,7 @@ mysql> SELECT PARTITION_NAME,TABLE_ROWS FROM INFORMATION_SCHEMA.PARTITIONS WHERE
 ## 19.4 分区使用场景
 
 - 当数据量很大(过T)时，肯定不能把数据一次性加载到内存中，这样查询一个或一定范围的记录是很耗时。另外一般这情况下，历史数据或不常访问的数据占很大部分，最新或热点数据占的比例不是很大，这时可以根据某些条件进行表分区
-- 分区表的更易于管理，比如删除过去某一时间的历史数据，直接执行`TRUNCATE`，或者狠点`DROP`整个分区，这比`DELETE`删除效率更高
+- 分区表更易于管理，比如删除过去某一时间的历史数据，直接执行`TRUNCATE`，或者狠点`DROP`整个分区，这比`DELETE`删除效率更高
 - 当数据量很大，或者将来很大的，但单块磁盘的容量不够，或者想提升I/O效率的时候，可以把未分区中的子分区挂载到不同的磁盘上
 - 使用分区表可避免某些特殊的瓶颈，例如InnoDB的单个索引的互斥访问
 - 在某些场景下，单个分区表的备份和恢复更有效率
@@ -3067,7 +3067,7 @@ mysql> SELECT PARTITION_NAME,TABLE_ROWS FROM INFORMATION_SCHEMA.PARTITIONS WHERE
 > MySQL如何快速删除大量数据(千万级别)？ [参考文章+Python代码实现](https://blog.csdn.net/weixin_33817140/article/details/114344233?utm_medium=distribute.pc_relevant.none-task-blog-BlogCommendFromMachineLearnPai2-1.control&dist_request_id=&depth_1-utm_source=distribute.pc_relevant.none-task-blog-BlogCommendFromMachineLearnPai2-1.control)
 
 + 方法一：如果删除整表数据，直接使用TRUNCATE TABLE命令就好
-+ 方法二：使用DELETE进行批量删除，通过LIMIT每次限定一定的数量，然后循环删除知道全部数据删除完毕，同时key_buffer_size由默认的8M提高512M
++ 方法二：使用DELETE进行批量删除，通过LIMIT每次限定一定的数量，然后循环删除直到数据全部删除完毕，同时key_buffer_size由默认的8M提高512M
 + 方法三：使用HASH分区通过PARTITION BY给表创建分区，通过EXPLAIN PARTITIONS获取分区后, 使用TRUNCATE PARTITION直接按分区进行删除,特别快
 
 注意：如果删除的数据超过表数据的百分之50，建议拷贝所需数据到临时表，创建备份，然后删除原表，再重命名临时表为原表
