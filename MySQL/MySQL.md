@@ -195,7 +195,7 @@ slow_query_log_file = slow.log
 - ` Management Serveices & Utilities`：系统管理和控制工具，主要提供备份、安全、复制、集群、分区等功能
 - `SQL Interface`：接受用户的SQL命令，并且返回用户需要查询的结果
 - `Parser`：SQL语句解析器
-- `Optimizer`：查询优化器，SQL语句在查询之前会使用查询优化器对查询进行优化。**就是优化客户端请求query**，根据客户端请求的query语句，和数据库中的一些统计信息，在一系列算法的基础上进行分析，得出一个最优的策略，告诉后面的程序如何取得这个query语句的结果。**For Example**： `select uid,name from user where gender = 1;`这个`select `查询先根据`where `语句进行选取，而不是先将表全部查询出来以后再进行`gender`过滤；然后根据`uid`和`name`进行属性投影，而不是将属性全部取出以后再进行过滤，最后将将两个查询条件联接起来生成最终查询结果
+- `Optimizer`：查询优化器，SQL语句在查询之前会使用查询优化器对查询进行优化。**就是优化客户端请求query**，根据客户端请求的query语句，和数据库中的一些统计信息，在一系列算法的基础上进行分析，得出一个最优的策略，告诉后面的程序如何取得这个query语句的结果。**For Example**： `select uid,name from user where gender = 1;`这个`select `查询先根据`where `语句进行选取，而不是先将表全部查询出来以后再进行`gender`过滤；然后根据`uid`和`name`进行属性投影，而不是将属性全部取出以后再进行过滤，最后将两个查询条件联接起来生成最终查询结果
 - `Caches & Buffers`：查询缓存
 - `Pluggable Storage Engines`：存储引擎接口M,ySQL区别于其他数据库的最重要的特点就是其**插件式的表存储引擎(注意：存储引擎是基于表的，而不是数据库)**
 - `File System`：数据落地到磁盘上，就是文件的存储
@@ -251,10 +251,10 @@ mysql> SHOW VARIABLES LIKE 'default_storage_engine%';
 	- 等待时间长  
 - 原因
 	- 查询语句写得差
-	- 索引失效：建了索引单是没有用上，包括单值索引和复合索引
+	- 索引失效：建了索引但是没有用上，包括单值索引和复合索引
 		- `SELECT * FROM Student WHERE Name='张三' AND Email = '123456@qq.com';`
 		- 单值索引: 只对表中的一列建立索引 - `CREATE INDEX id_Student_Name ON Student(Name);` 	
-		- 多值索引：对表中的多列进行索引 - `CREATE INDEX id_Student_Name_Email ON Student(Name, Email);`
+		- 复合索引：对表中的多列进行索引 - `CREATE INDEX id_Student_Name_Email ON Student(Name, Email);`
 	- 关联查询太多`join`（设计缺陷或者不得已的需求）
 	- 服务器调优以及各个参数的设置（缓存、线程数等）不合理或者比例不恰当
 
@@ -415,7 +415,7 @@ ALTER TABLE tabName ADD FULLTEXT indexName(column_list);
 - `BTree`B/B+树索引
 - `Hash`哈希索引：MD5, CRC16/32
 - `Full-text`全文索引
-- `R-Tree`R数索引
+- `R-Tree`R树索引
 
 > `BTree`B树索引检索原理：
 
@@ -447,7 +447,7 @@ ALTER TABLE tabName ADD FULLTEXT indexName(column_list);
 - 聚簇索引：表索引文件和数据文件是聚集的(`.ibd文件`), 同样使用B+树组织实现；所有的非叶子节点都是索引，叶子结点叶子节点存储的是索引+真实的数据；InnoDB的主键索引就是聚簇索引，主键索引的叶子结点存储行数据(包含了主键值+具体数据内容)，二级索引的叶结点存储行的主键值
 	- 为什么InnoDB必须有主键，并且推荐使用整型的自增主键？
 		- 如果没有建主键，MySQL会在InnoDB表中查找可以建**唯一索引**的列并在后台建立；如果没找到，则默认添加**主键索引**列来帮助维护和组织整张表的数据
-		- 使用整型主键方便比较大小且暂用空间小，如果使用36位字符串型UUID(通用用户唯一标识符，随机的)，需要先转换成ASCII码后才能进行对比且暂用空间大
+		- 使用整型主键方便比较大小且暂用空间小，如果使用36位字符串型UUID(通用用户唯一标识符，随机且无序)，需要先转换成ASCII码后才能进行对比且暂用空间大
 		- 自增：使得结点内从左到右每个元素依次递增(有序序列)，当插入新节点时减少结点分裂的次数，方便二叉查找和树的结构调整，便于维护
 	- 为什么非主键索引结构叶子节点存储的是主键值？ 
 		- 保证一致性:都通过主键索引来找到最终的数据，避免维护多份数据导致不一致的情况
